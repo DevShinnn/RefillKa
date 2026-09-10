@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { persistStore } from '@/app/ops/actions';
 import { createClient } from '@/lib/supabase/client';
 import { useCollections } from '@/lib/hooks/useCollections';
 import { usePayments } from '@/lib/hooks/usePayments';
@@ -114,9 +115,12 @@ export function OpsConsole({
     if (!due.length) return;
     let cancelled = false;
     void (async () => {
-      const { data } = await supabase.from('stores').update({ pay_plan: 'fully_paid' }).in('id', due.map((s) => s.id)).select('*');
-      if (cancelled || !data?.length) return;
-      const saved = new Map((data as Store[]).map((s) => [s.id, s]));
+      const saved = new Map<string, Store>();
+      for (const s of due) {
+        const result = await persistStore({ id: s.id, lguId: s.lgu_id, patch: { pay_plan: 'fully_paid' } });
+        if (result.store) saved.set(result.store.id, result.store);
+      }
+      if (cancelled || !saved.size) return;
       setStores((prev) => prev.map((s) => saved.get(s.id) ?? s));
     })();
     return () => {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { persistStore } from '@/app/ops/actions';
 import { createClient } from '@/lib/supabase/client';
 import { useCollections } from '@/lib/hooks/useCollections';
 import {
@@ -102,7 +103,8 @@ export function LogClient({
       return;
     }
     if (isReorder) {
-      await supabase.from('stores').update({ will_reorder: true }).eq('id', storeId);
+      const store = stores.find((s) => s.id === storeId);
+      if (store) await persistStore({ id: store.id, lguId: store.lgu_id, willReorder: true, patch: {} });
     }
     setQuantity('1');
     setNotes('');

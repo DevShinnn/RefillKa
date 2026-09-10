@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { createAccount, deleteAccount, getAccountUsage, updateAccount } from '@/app/ops/actions';
+import { createAccount, deleteAccount, getAccountUsage, persistStore, removeStore, updateAccount } from '@/app/ops/actions';
 import { manilaYmd, peso, tstamp } from '@/lib/format';
 import { fridayWeekStart, INSTALLMENT_WEEKS, planPaidCount } from '@/lib/installments';
 import { normalizeOfficerId } from '@/lib/loginId';
@@ -307,31 +307,27 @@ export function OpsDatabasePanel({
   const save = async () => {
     setBusy(true);
     if (tab === 'stores') {
-      const row = {
-        ...storeDraft,
+      const { lgu_id, active, ...fields } = storeDraft;
+      const patch = {
+        ...fields,
         barangay: storeDraft.barangay.trim() || '—',
         name: storeDraft.name.trim() || `${storeDraft.first_name} ${storeDraft.last_name}`.trim(),
         channel: storeDraft.classification === 'independent_reseller' ? 'Independent reseller' : 'Sari-sari',
         updated_by: profile.id,
         updated_by_name: profile.full_name || 'Developer',
       };
-      if (openId === 'new') {
-        const { data, error } = await supabase.from('stores').insert({ ...row, active: storeDraft.active }).select('*').single();
-        setBusy(false);
-        setPrompt(null);
-        if (error || !data) return toast(error?.message || 'Could not add store');
-        onStores([...stores, data as Store]);
-        setOpenId(null);
-        toast('Store added');
-        return;
-      }
-      const { data, error } = await supabase.from('stores').update(row).eq('id', openId).select('*').single();
+      const result = await persistStore({
+        id: openId === 'new' ? null : openId,
+        lguId: lgu_id,
+        active,
+        patch,
+      });
       setBusy(false);
       setPrompt(null);
-      if (error || !data) return toast(error?.message || 'Could not save store');
-      onStores(stores.map((s) => (s.id === openId ? (data as Store) : s)));
+      if (result.error || !result.store) return toast(result.error || (openId === 'new' ? 'Could not add store' : 'Could not save store'));
+      onStores(openId === 'new' ? [...stores, result.store] : stores.map((s) => (s.id === openId ? result.store! : s)));
       setOpenId(null);
-      toast('Store updated');
+      toast(openId === 'new' ? 'Store added' : 'Store updated');
       return;
     }
 
@@ -368,8 +364,8 @@ export function OpsDatabasePanel({
         setOpenId(null);
         const store = stores.find((s) => s.id === payDraft.store_id);
         if (store && store.pay_plan !== 'fully_paid' && planPaidCount(nextPays, store.id, store.claimed_on) >= INSTALLMENT_WEEKS) {
-          const { data: saved } = await supabase.from('stores').update({ pay_plan: 'fully_paid' }).eq('id', store.id).select('*').single();
-          if (saved) onStores(stores.map((s) => (s.id === store.id ? (saved as Store) : s)));
+          const saved = await persistStore({ id: store.id, lguId: store.lgu_id, patch: { pay_plan: 'fully_paid' } });
+          if (saved.store) onStores(stores.map((s) => (s.id === store.id ? saved.store! : s)));
           toast('Collection added · kit complete · fully paid');
         } else {
           toast('Collection added');
@@ -396,8 +392,8 @@ export function OpsDatabasePanel({
       setOpenId(null);
       const store = stores.find((s) => s.id === payDraft.store_id);
       if (store && store.pay_plan !== 'fully_paid' && planPaidCount(nextPays, store.id, store.claimed_on) >= INSTALLMENT_WEEKS) {
-        const { data: saved } = await supabase.from('stores').update({ pay_plan: 'fully_paid' }).eq('id', store.id).select('*').single();
-        if (saved) onStores(stores.map((s) => (s.id === store.id ? (saved as Store) : s)));
+        const saved = await persistStore({ id: store.id, lguId: store.lgu_id, patch: { pay_plan: 'fully_paid' } });
+        if (saved.store) onStores(stores.map((s) => (s.id === store.id ? saved.store! : s)));
         toast('Collection updated · kit complete · fully paid');
       } else {
         toast('Collection updated');
@@ -469,7 +465,11 @@ export function OpsDatabasePanel({
         toast(`Created ${normalizeOfficerId(userDraft.officerId)}`);
         return;
       }
-      const result = await updateAccount(openId as string, input);
+      const nextPin = userDraft.pin.trim();
+      const result = await updateAccount(openId as string, {
+        ...input,
+        ...(nextPin ? { pin: nextPin } : {}),
+      });
       setBusy(false);
       setPrompt(null);
       if (result.error || !result.account) return toast(result.error || 'Could not update account');
@@ -520,12 +520,21 @@ export function OpsDatabasePanel({
       toast('Account deleted');
       return;
     }
+    if (tab === 'stores') {
+      const result = await removeStore(openId);
+      setBusy(false);
+      setPrompt(null);
+      if (result.error) return toast(result.error);
+      onStores(stores.filter((s) => s.id !== openId));
+      setOpenId(null);
+      toast('Row deleted');
+      return;
+    }
     const table = tab === 'collections' ? 'collections' : tab;
     const { error } = await supabase.from(table).delete().eq('id', openId);
     setBusy(false);
     setPrompt(null);
     if (error) return toast(error.message || 'Could not delete row');
-    if (tab === 'stores') onStores(stores.filter((s) => s.id !== openId));
     if (tab === 'payments') onPayments(payments.filter((p) => p.id !== openId));
     if (tab === 'collections') onOrders(orders.filter((c) => c.id !== openId));
     if (tab === 'products') onProducts(products.filter((p) => p.id !== openId));

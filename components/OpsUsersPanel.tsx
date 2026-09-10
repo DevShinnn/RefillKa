@@ -148,6 +148,8 @@ export function OpsUsersPanel({
       if (!/^\d{6}$/.test(draft.pin)) return toast('PIN must be 6 digits');
     } else if (!selected) {
       return toast('Pick an account first');
+    } else if (draft.pin && !/^\d{6}$/.test(draft.pin)) {
+      return toast('New PIN must be 6 digits');
     }
     void save();
   };
@@ -187,13 +189,21 @@ export function OpsUsersPanel({
       setPrompt(null);
       return;
     }
-    const result = await updateAccount(selected.id, payload());
+    const nextPin = draft.pin.trim();
+    const result = await updateAccount(selected.id, {
+      ...payload(),
+      ...(nextPin ? { pin: nextPin } : {}),
+    });
+    if (result.error || !result.account) {
+      setBusy(false);
+      setPrompt(null);
+      return toast(result.error || 'Could not update account');
+    }
     setBusy(false);
     setPrompt(null);
-    if (result.error || !result.account) return toast(result.error || 'Could not update account');
     onChange(accounts.map((a) => (a.id === selected.id ? result.account! : a)));
     setOpenId(null);
-    toast('Account updated');
+    toast(nextPin ? 'Account updated · login PIN is now the new password' : 'Account updated');
   };
 
   const reset = async () => {
@@ -355,7 +365,7 @@ export function OpsUsersPanel({
             </label>
           )}
           <label className="field">
-            <span>{openId === 'new' ? 'PIN (6 digits)' : 'New PIN (optional reset)'}</span>
+            <span>{openId === 'new' ? 'PIN (this is the login password)' : 'New PIN (updates the login password)'}</span>
             <input
               className="input"
               inputMode="numeric"

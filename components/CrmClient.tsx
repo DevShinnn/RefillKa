@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { persistStore } from '@/app/ops/actions';
 import { createClient } from '@/lib/supabase/client';
 import { useCollections } from '@/lib/hooks/useCollections';
 import { usePayments } from '@/lib/hooks/usePayments';
@@ -235,56 +236,29 @@ export function CrmClient({
     if (!profile.lgu_id) return toast('Your account has no LGU assigned');
     setBusy(true);
 
-    if (screen === 'new') {
-      const { data, error } = await supabase
-        .from('stores')
-        .insert({
-          lgu_id: profile.lgu_id,
-          ...patch,
-          will_reorder: willReorder === '' ? null : willReorder === 'yes',
-          active: true,
-        })
-        .select('*')
-        .single();
-      setBusy(false);
-      if (error || !data) {
-        toast(
-          /column|schema|classification|arrp|claimed/i.test(error?.message || '')
-            ? 'Store profile columns are missing. Apply migration 0011_store_profile.sql.'
-            : error?.message || 'Could not open store'
-        );
-        return;
-      }
-      const created = data as Store;
-      setStores((prev) => [...prev, created].sort((a, b) => storeDisplayName(a).localeCompare(storeDisplayName(b))));
-      openStore(created);
-      toast('Store opened');
-      return;
-    }
-
-    if (!openId) {
-      setBusy(false);
-      return;
-    }
-    const { data, error } = await supabase
-      .from('stores')
-      .update({
-        ...patch,
-        will_reorder: willReorder === '' ? null : willReorder === 'yes',
-      })
-      .eq('id', openId)
-      .select('*')
-      .single();
+    const result = await persistStore({
+      id: screen === 'new' ? null : openId,
+      lguId: profile.lgu_id,
+      active: screen === 'new' ? true : undefined,
+      willReorder: willReorder === '' ? null : willReorder === 'yes',
+      patch,
+    });
     setBusy(false);
-    if (error || !data) {
+    if (result.error || !result.store) {
       toast(
-        /column|schema|classification|arrp|claimed/i.test(error?.message || '')
+        /column|schema|classification|arrp|claimed/i.test(result.error || '')
           ? 'Store profile columns are missing. Apply migration 0011_store_profile.sql.'
-          : 'Could not save details'
+          : result.error || (screen === 'new' ? 'Could not open store' : 'Could not save details')
       );
       return;
     }
-    const saved = data as Store;
+    const saved = result.store;
+    if (screen === 'new') {
+      setStores((prev) => [...prev, saved].sort((a, b) => storeDisplayName(a).localeCompare(storeDisplayName(b))));
+      openStore(saved);
+      toast('Store opened');
+      return;
+    }
     setStores((prev) => prev.map((s) => (s.id === openId ? saved : s)));
     fillForm(saved);
     toast('Details saved');
@@ -307,11 +281,10 @@ export function CrmClient({
   };
 
   const markFullyPaid = async (target: Store) => {
-    const { data } = await supabase.from('stores').update({ pay_plan: 'fully_paid' }).eq('id', target.id).select('*').single();
-    if (!data) return null;
-    const saved = data as Store;
-    setStores((prev) => prev.map((s) => (s.id === saved.id ? saved : s)));
-    return saved;
+    const result = await persistStore({ id: target.id, lguId: target.lgu_id, patch: { pay_plan: 'fully_paid' } });
+    if (!result.store) return null;
+    setStores((prev) => prev.map((s) => (s.id === result.store!.id ? result.store! : s)));
+    return result.store;
   };
 
   const commitPayment = async () => {
@@ -433,8 +406,9 @@ export function CrmClient({
       });
     }
 
-    await supabase.from('stores').update({ will_reorder: true }).eq('id', store.id);
-    setStores((prev) => prev.map((s) => (s.id === store.id ? { ...s, will_reorder: true } : s)));
+    const reorder = await persistStore({ id: store.id, lguId: store.lgu_id, willReorder: true, patch: {} });
+    if (reorder.store) setStores((prev) => prev.map((s) => (s.id === store.id ? reorder.store! : s)));
+    else setStores((prev) => prev.map((s) => (s.id === store.id ? { ...s, will_reorder: true } : s)));
     setWillReorder('yes');
 
     setBusy(false);
@@ -535,8 +509,8 @@ export function CrmClient({
             ? { feedback_service: note }
             : null;
       if (latest) {
-        await supabase.from('stores').update(latest).eq('id', store.id);
-        setStores((prev) => prev.map((s) => (s.id === store.id ? { ...s, ...latest } : s)));
+        const saved = await persistStore({ id: store.id, lguId: store.lgu_id, patch: latest });
+        setStores((prev) => prev.map((s) => (s.id === store.id ? (saved.store ?? { ...s, ...latest }) : s)));
       }
       setFeedbackNote('');
       toast('Feedback posted');
@@ -566,9 +540,12 @@ export function CrmClient({
     if (!due.length) return;
     let cancelled = false;
     void (async () => {
-      const { data } = await supabase.from('stores').update({ pay_plan: 'fully_paid' }).in('id', due.map((s) => s.id)).select('*');
-      if (cancelled || !data?.length) return;
-      const saved = new Map((data as Store[]).map((s) => [s.id, s]));
+      const saved = new Map<string, Store>();
+      for (const s of due) {
+        const result = await persistStore({ id: s.id, lguId: s.lgu_id, patch: { pay_plan: 'fully_paid' } });
+        if (result.store) saved.set(result.store.id, result.store);
+      }
+      if (cancelled || !saved.size) return;
       setStores((prev) => prev.map((s) => saved.get(s.id) ?? s));
     })();
     return () => {

@@ -1,14 +1,58 @@
 'use client';
 
-import { useActionState } from 'react';
-import { signIn, type LoginState } from '@/app/login/actions';
+import { useState, type FormEvent } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import { loginToEmail } from '@/lib/loginId';
+import { homeForRole, isFieldRole, isOpsRole, type Role } from '@/lib/roles';
 import { RefillMark, Wordmark } from '@/components/Brand';
 
-const initial: LoginState = { error: null };
-
 export function LoginBox({ portal }: { portal: 'field' | 'ops' }) {
-  const [state, formAction, pending] = useActionState(signIn, initial);
   const ops = portal === 'ops';
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [showPin, setShowPin] = useState(false);
+
+  const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const loginId = String(form.get('login_id') ?? '').trim();
+    const password = String(form.get('password') ?? '');
+    if (!loginId || !password) {
+      setError('Enter your ID and PIN.');
+      return;
+    }
+
+    setPending(true);
+    setError(null);
+    const supabase = createClient();
+    const { data, error: authError } = await supabase.auth.signInWithPassword({
+      email: loginToEmail(loginId),
+      password,
+    });
+    if (authError || !data.user) {
+      setPending(false);
+      setError('Sign-in failed — check your ID and PIN.');
+      return;
+    }
+
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', data.user.id).single();
+    const role = (profile?.role ?? null) as Role | null;
+
+    if (portal === 'field' && !isFieldRole(role)) {
+      await supabase.auth.signOut();
+      setPending(false);
+      setError('This page is for CENRO. Use /ops for operations.');
+      return;
+    }
+    if (portal === 'ops' && !isOpsRole(role)) {
+      await supabase.auth.signOut();
+      setPending(false);
+      setError('This page is for operations. Use /login for CENRO.');
+      return;
+    }
+
+    window.location.assign(homeForRole(role));
+  };
 
   return (
     <section className="login">
@@ -28,8 +72,7 @@ export function LoginBox({ portal }: { portal: 'field' | 'ops' }) {
             : 'Enter the officer ID and PIN assigned to you.'}
         </p>
 
-        <form action={formAction}>
-          <input type="hidden" name="portal" value={portal} />
+        <form onSubmit={onSubmit}>
           <div className="field">
             <label htmlFor="login_id">ID</label>
             <input
@@ -45,18 +88,29 @@ export function LoginBox({ portal }: { portal: 'field' | 'ops' }) {
           </div>
           <div className="field">
             <label htmlFor="password">PIN</label>
-            <input
-              className="input"
-              id="password"
-              name="password"
-              type="password"
-              inputMode="numeric"
-              autoComplete="current-password"
-              placeholder="6-digit PIN"
-              required
-            />
+            <div className="login__pin">
+              <input
+                className="input"
+                id="password"
+                name="password"
+                type={showPin ? 'text' : 'password'}
+                inputMode="numeric"
+                autoComplete="current-password"
+                placeholder="6-digit PIN"
+                required
+              />
+              <button
+                className="login__show"
+                type="button"
+                onClick={() => setShowPin((open) => !open)}
+                aria-pressed={showPin}
+                aria-label={showPin ? 'Hide PIN' : 'Show PIN'}
+              >
+                {showPin ? 'Hide' : 'Show'}
+              </button>
+            </div>
           </div>
-          {state.error && <div className="err">{state.error}</div>}
+          {error ? <div className="err">{error}</div> : null}
           <button className="btn btn-primary" type="submit" disabled={pending}>
             {pending ? 'Signing in…' : 'Sign in'}
           </button>

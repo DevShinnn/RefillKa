@@ -81,6 +81,14 @@ img { max-width: 100%; display: block; }
 select.input { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%236B6B6B' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 13px center; padding-right: 34px; }
 .btn { border: 0; border-radius: var(--radius-xs); padding: 13px 18px; font-weight: 650; font-size: .92rem; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: .16s var(--ease); }
 .loginbox .input { font-size: 16px; min-height: 48px; }
+.login__pin { position: relative; }
+.login__pin .input { padding-right: 72px; }
+.login__show {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  border: 0; background: transparent; color: var(--mid); font-size: .78rem; font-weight: 700;
+  letter-spacing: .04em; text-transform: uppercase; min-height: 36px; padding: 0 8px; cursor: pointer;
+}
+.login__show:hover { color: var(--ink); }
 .btn-primary {
   background: linear-gradient(180deg, var(--green-soft), var(--green-mid)); color: #fff;
   width: 100%; margin-top: 18px; min-height: 48px;

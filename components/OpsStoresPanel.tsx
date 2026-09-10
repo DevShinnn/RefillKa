@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { persistStore, removeStore } from '@/app/ops/actions';
 import { isInstallmentStore } from '@/lib/installments';
 import {
   blankStoreForm,
@@ -41,7 +41,6 @@ export function OpsStoresPanel({
   orders?: Collection[];
   payments?: Payment[];
 }) {
-  const supabase = useMemo(() => createClient(), []);
   const defaultLgu = profile.lgu_id || lgus.find((l) => l.name === 'Taguig')?.id || lgus[0]?.id || '';
   const [q, setQ] = useState('');
   const [openId, setOpenId] = useState<string | 'new' | null>(focusId || null);
@@ -107,50 +106,31 @@ export function OpsStoresPanel({
   };
 
   const save = async () => {
+    if (openId !== 'new' && !selected) return;
     const patch = toStorePatch(form, profile);
     setBusy(true);
-    if (openId === 'new') {
-      const { data, error } = await supabase
-        .from('stores')
-        .insert({ lgu_id: lguId, ...patch, active })
-        .select('*')
-        .single();
-      setBusy(false);
-      setPrompt(null);
-      if (error || !data) return toast(error?.message || 'Could not add store');
-      const created = data as Store;
-      onChange([...stores, created]);
-      setOpenId(null);
-      toast('Store added');
-      return;
-    }
-    if (!selected) {
-      setBusy(false);
-      setPrompt(null);
-      return;
-    }
-    const { data, error } = await supabase
-      .from('stores')
-      .update({ lgu_id: lguId, ...patch, active })
-      .eq('id', selected.id)
-      .select('*')
-      .single();
+    const result = await persistStore({
+      id: openId === 'new' ? null : selected?.id,
+      lguId,
+      active,
+      patch,
+    });
     setBusy(false);
     setPrompt(null);
-    if (error || !data) return toast(error?.message || 'Could not save store');
-    const saved = data as Store;
-    onChange(stores.map((s) => (s.id === saved.id ? saved : s)));
+    if (result.error || !result.store) return toast(result.error || (openId === 'new' ? 'Could not add store' : 'Could not save store'));
+    const saved = result.store;
+    onChange(openId === 'new' ? [...stores, saved] : stores.map((s) => (s.id === saved.id ? saved : s)));
     setOpenId(null);
-    toast('Store updated');
+    toast(openId === 'new' ? 'Store added' : 'Store updated');
   };
 
   const remove = async () => {
     if (!selected) return;
     setBusy(true);
-    const { error } = await supabase.from('stores').delete().eq('id', selected.id);
+    const result = await removeStore(selected.id);
     setBusy(false);
     setPrompt(null);
-    if (error) return toast(error.message || 'Could not delete store');
+    if (result.error) return toast(result.error);
     onChange(stores.filter((s) => s.id !== selected.id));
     setOpenId(null);
     toast('Store deleted');
