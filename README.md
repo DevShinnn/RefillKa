@@ -1,5 +1,7 @@
 # RefillKa — Collection Logging System
 
+Pilot testing only for RefillKa.
+
 A live, role-based collection-logging platform for RefillKa, built for **nationwide**
 rollout and starting with the **Taguig Monitored Field Study** (pre-pilot).
 
