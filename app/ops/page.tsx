@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { homeForRole, isFieldRole, type Role } from '@/lib/roles';
@@ -5,20 +6,35 @@ import { scopeLabel } from '@/lib/scope';
 import type { AppFeedback, Collection, FeedbackReply, Lgu, Payment, Product, Profile, Region, Store, StoreFeedback } from '@/lib/types';
 import { OpsConsole } from '@/components/OpsConsole';
 import { LoginBox } from '@/components/LoginBox';
+import OpsLoading from './loading';
 
 export const dynamic = 'force-dynamic';
 
 export default async function OpsPage() {
   const supabase = await createClient();
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return <LoginBox portal="ops" />;
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.user) return <LoginBox portal="ops" />;
+
+  return (
+    <Suspense fallback={<OpsLoading />}>
+      <OpsApp />
+    </Suspense>
+  );
+}
+
+async function OpsApp() {
+  const supabase = await createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.user) redirect('/ops');
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('*')
-    .eq('id', user.id)
+    .eq('id', session.user.id)
     .single<Profile>();
 
   if (!profile || isFieldRole(profile.role)) redirect('/log');

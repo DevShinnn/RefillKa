@@ -90,6 +90,11 @@ const ACCESS: Record<string, Role[]> = {
   '/executive': ['superadmin', 'lgu_exec', 'regional_exec', 'national_exec', 'national_admin'],
 };
 
+export function roleFromAuthUser(user: { user_metadata?: Record<string, unknown> } | null | undefined): Role | null {
+  const role = user?.user_metadata?.role;
+  return typeof role === 'string' && role in ROLE_LABEL ? (role as Role) : null;
+}
+
 export function canAccess(role: Role | null, path: string): boolean {
   if (!role) return false;
   const key = Object.keys(ACCESS).find((p) => path === p || path.startsWith(p + '/'));

@@ -1,11 +1,21 @@
+import { Suspense } from 'react';
 import { requireProfile } from '@/lib/auth';
 import { scopeLabel } from '@/lib/scope';
 import type { Collection, Payment, Product, Store } from '@/lib/types';
 import { ExecClient } from '@/components/ExecClient';
+import ExecutiveLoading from './loading';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ExecutivePage() {
+export default function ExecutivePage() {
+  return (
+    <Suspense fallback={<ExecutiveLoading />}>
+      <ExecutiveApp />
+    </Suspense>
+  );
+}
+
+async function ExecutiveApp() {
   const { supabase, profile } = await requireProfile([
     'superadmin',
     'lgu_exec',

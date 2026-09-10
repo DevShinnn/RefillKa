@@ -1,14 +1,31 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
-import { FIELD_LOGIN, OPS_LOGIN, canAccess, homeForRole, loginPathFor, type Role } from '@/lib/roles';
+import { FIELD_LOGIN, OPS_LOGIN, canAccess, homeForRole, loginPathFor, roleFromAuthUser } from '@/lib/roles';
+
+function hasAuthCookie(request: NextRequest) {
+  return request.cookies.getAll().some((cookie) => cookie.name.includes('-auth-token'));
+}
+
+function redirectTo(request: NextRequest, pathname: string) {
+  const url = request.nextUrl.clone();
+  url.pathname = pathname;
+  return NextResponse.redirect(url);
+}
 
 /**
- * Refreshes the Supabase session cookie on every request and guards routes
- * by role. Runs in the Edge middleware.
+ * Refreshes the Supabase session cookie on guarded routes and routes by role.
+ * Login screens skip the Auth network hop when there is no session cookie.
  */
 export async function updateSession(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  const path = request.nextUrl.pathname;
+  const isLoginSurface = path === FIELD_LOGIN || path === OPS_LOGIN;
 
+  if (!hasAuthCookie(request)) {
+    if (isLoginSurface) return NextResponse.next({ request });
+    return redirectTo(request, path === '/' ? FIELD_LOGIN : loginPathFor(path));
+  }
+
+  let response = NextResponse.next({ request });
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -28,38 +45,27 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // IMPORTANT: getUser() revalidates the token with Supabase (do not trust getSession here).
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const path = request.nextUrl.pathname;
-  const isFieldLogin = path === FIELD_LOGIN;
-
   if (!user) {
-    if (isFieldLogin || path === OPS_LOGIN) return response;
-    const url = request.nextUrl.clone();
-    url.pathname = loginPathFor(path);
-    return NextResponse.redirect(url);
+    if (isLoginSurface) return response;
+    return redirectTo(request, loginPathFor(path));
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
-  const role = (profile?.role ?? null) as Role | null;
+  let role = roleFromAuthUser(user);
+  if (!role) {
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    role = profile?.role ?? null;
+  }
 
-  if (isFieldLogin || path === '/') {
-    const url = request.nextUrl.clone();
-    url.pathname = homeForRole(role);
-    return NextResponse.redirect(url);
+  if (path === FIELD_LOGIN || path === '/') {
+    return redirectTo(request, homeForRole(role));
   }
 
   if (!canAccess(role, path)) {
-    const url = request.nextUrl.clone();
-    url.pathname = homeForRole(role);
-    return NextResponse.redirect(url);
+    return redirectTo(request, homeForRole(role));
   }
 
   return response;

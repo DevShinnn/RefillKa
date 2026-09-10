@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { loginToEmail } from '@/lib/loginId';
-import { homeForRole, isFieldRole, isOpsRole, type Role } from '@/lib/roles';
+import { homeForRole, isFieldRole, isOpsRole, roleFromAuthUser, type Role } from '@/lib/roles';
 import { RefillMark, Wordmark } from '@/components/Brand';
 
 export function LoginBox({ portal }: { portal: 'field' | 'ops' }) {
   const ops = portal === 'ops';
+  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [showPin, setShowPin] = useState(false);
@@ -35,8 +37,11 @@ export function LoginBox({ portal }: { portal: 'field' | 'ops' }) {
       return;
     }
 
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', data.user.id).single();
-    const role = (profile?.role ?? null) as Role | null;
+    let role = roleFromAuthUser(data.user);
+    if (!role) {
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', data.user.id).single();
+      role = (profile?.role ?? null) as Role | null;
+    }
 
     if (portal === 'field' && !isFieldRole(role)) {
       await supabase.auth.signOut();
@@ -51,7 +56,12 @@ export function LoginBox({ portal }: { portal: 'field' | 'ops' }) {
       return;
     }
 
-    window.location.assign(homeForRole(role));
+    const dest = homeForRole(role);
+    if (window.location.pathname === dest) {
+      router.refresh();
+      return;
+    }
+    window.location.replace(dest);
   };
 
   return (

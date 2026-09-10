@@ -11,8 +11,9 @@ import type { Profile } from '@/lib/types';
 export async function requireProfile(allowed: Role[]) {
   const supabase = await createClient();
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
+  const user = session?.user;
   const loginPath = allowed.includes('cenro') ? FIELD_LOGIN : loginPathFor('/admin');
   if (!user) redirect(loginPath);
 

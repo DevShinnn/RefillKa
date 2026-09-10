@@ -1,11 +1,21 @@
+import { Suspense } from 'react';
 import { requireProfile } from '@/lib/auth';
 import { scopeLabel } from '@/lib/scope';
 import type { Collection, Payment, Product, Store } from '@/lib/types';
 import { CrmClient } from '@/components/CrmClient';
+import LogLoading from './loading';
 
 export const dynamic = 'force-dynamic';
 
-export default async function LogPage() {
+export default function LogPage() {
+  return (
+    <Suspense fallback={<LogLoading />}>
+      <LogApp />
+    </Suspense>
+  );
+}
+
+async function LogApp() {
   const { supabase, profile } = await requireProfile(['superadmin', 'cenro', 'lgu_admin', 'national_admin']);
 
   const [{ data: stores }, { data: products }, { data: collections }, { data: payments }, scope] = await Promise.all([
