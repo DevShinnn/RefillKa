@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { loginToEmail } from '@/lib/loginId';
+import { DEMO_FIELD, DEMO_OPS, DEMO_PIN } from '@/lib/demo';
 import { homeForRole, isFieldRole, isOpsRole, roleFromAuthUser, type Role } from '@/lib/roles';
 import { RefillMark, Wordmark } from '@/components/Brand';
 
@@ -125,6 +126,35 @@ export function LoginBox({ portal }: { portal: 'field' | 'ops' }) {
             {pending ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
+
+        <details className="demoaccts">
+          <summary>Demo account · sandbox only</summary>
+          <p className="sub">Uses fake Demo sandbox stores. It cannot see or change Taguig data.</p>
+          <table>
+            <tbody>
+              <tr>
+                <td>{ops ? 'Admin' : 'Field'}</td>
+                <td>
+                  <code>{ops ? DEMO_OPS.officerId : DEMO_FIELD.officerId}</code>
+                  {' · PIN '}
+                  <code>{DEMO_PIN}</code>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <button
+            className="btn login__demo"
+            type="button"
+            onClick={() => {
+              const id = document.getElementById('login_id');
+              const pin = document.getElementById('password');
+              if (id instanceof HTMLInputElement) id.value = ops ? DEMO_OPS.officerId : DEMO_FIELD.officerId;
+              if (pin instanceof HTMLInputElement) pin.value = DEMO_PIN;
+            }}
+          >
+            Fill demo login
+          </button>
+        </details>
       </div>
     </section>
   );
