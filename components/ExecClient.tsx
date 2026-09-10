@@ -2,8 +2,10 @@
 
 import { useMemo } from 'react';
 import { useCollections } from '@/lib/hooks/useCollections';
-import { MATERIALS, PILOT_TARGET, toSachetEquiv, type Profile, type Store } from '@/lib/types';
-import { fmt, isToday } from '@/lib/format';
+import { PILOT_TARGET, WEEKLY_INSTALLMENT, productById, toSachetEquiv, type Payment, type Product, type Profile, type Store } from '@/lib/types';
+import { fmt, manilaYmd, peso } from '@/lib/format';
+import { INSTALLMENT_WEEKS, installmentWeekFor } from '@/lib/installments';
+import { usePayments } from '@/lib/hooks/usePayments';
 import { Topbar } from './Topbar';
 import { Kpi, Bar, Empty } from './ui';
 
@@ -13,32 +15,50 @@ export function ExecClient({
   profile,
   scope,
   stores,
+  products,
+  payments = [],
   initial,
 }: {
   profile: Profile;
   scope: string;
   stores: Store[];
+  products: Product[];
+  payments?: Payment[];
   initial: any[];
 }) {
   const { rows, status } = useCollections(initial);
+  const { rows: payRows } = usePayments(payments);
 
   const sachet = rows.reduce((a, r) => a + toSachetEquiv(r), 0);
   const pct = Math.min(100, (sachet / PILOT_TARGET) * 100);
-  const refill = rows.filter((r) => r.material === 'refill').reduce((a, r) => a + Number(r.quantity), 0);
-  const activeStores = new Set(rows.map((r) => r.store_id)).size;
-  const today = rows.filter((r) => isToday(r.created_at)).length;
+  const gallons = rows
+    .filter((r) => r.product_id || r.material === 'refill')
+    .reduce((a, r) => a + Number(r.quantity), 0);
+  const sales = rows.reduce((a, r) => a + (r.unit_price != null ? Number(r.unit_price) * Number(r.quantity) : 0), 0);
+  const currentWeek = installmentWeekFor(manilaYmd());
+  const collectedWeek = currentWeek
+    ? payRows
+        .filter((p) => p.week_start === currentWeek.start)
+        .reduce((a, p) => a + Number(p.amount), 0)
+    : 0;
+  const willReorder = stores.filter((s) => s.will_reorder).length;
 
-  const byMat = useMemo(
-    () =>
-      MATERIALS.map((m) => ({
-        ...m,
-        val: rows.filter((r) => r.material === m.id).reduce((a, r) => a + Number(r.quantity), 0),
-      }))
-        .filter((m) => m.val > 0)
-        .sort((a, b) => b.val - a.val),
-    [rows]
-  );
-  const maxMat = Math.max(1, ...byMat.map((m) => m.val));
+  const byProduct = useMemo(() => {
+    const map = new Map<string, { name: string; gal: number; color: string }>();
+    for (const r of rows) {
+      const p = productById(products, r.product_id);
+      if (!p) continue;
+      const cur = map.get(p.id) ?? {
+        name: p.name,
+        gal: 0,
+        color: p.category === 'food' ? '#F0D709' : '#2390C9',
+      };
+      cur.gal += Number(r.quantity);
+      map.set(p.id, cur);
+    }
+    return [...map.values()].sort((a, b) => b.gal - a.gal);
+  }, [rows, products]);
+  const maxProduct = Math.max(1, ...byProduct.map((p) => p.gal));
 
   const byBrgy = useMemo(() => {
     const map = new Map<string, number>();
@@ -52,7 +72,7 @@ export function ExecClient({
 
   return (
     <div className="app">
-      <Topbar role={profile.role} name={profile.full_name || 'Executive'} meta={scope} status={status} />
+      <Topbar role={profile.role} name={profile.full_name || 'Executive'} meta={scope} officerId={profile.officer_id} status={status} />
       <main className="main">
         <div className="viewhead">
           <div>
@@ -73,10 +93,10 @@ export function ExecClient({
         </div>
 
         <div className="kpis">
-          <Kpi label="Sachet-equiv. diverted" value={fmt(sachet)} unit="weighted diversion units" accent="var(--green-deep)" />
-          <Kpi label="Refill dispensed" value={fmt(refill)} unit="litres, bulk refilling" accent="var(--blue)" />
-          <Kpi label="Active refill points" value={activeStores} unit={`of ${stores.length} in study`} accent="var(--teal)" />
-          <Kpi label="Collections today" value={today} unit={`${rows.length} total entries`} accent="var(--red)" />
+          <Kpi label="Collections this week" value={peso(collectedWeek)} unit={`${peso(WEEKLY_INSTALLMENT)} × ${INSTALLMENT_WEEKS} weeks from Sep 11`} accent="var(--green-deep)" />
+          <Kpi label="Gallons refilled" value={fmt(gallons)} unit="product orders" accent="var(--blue)" />
+          <Kpi label="Will reorder" value={willReorder} unit={`of ${stores.length} stores`} accent="var(--teal)" />
+          <Kpi label="Refill order value" value={peso(sales)} unit="refill + container" accent="var(--red)" />
         </div>
 
         <div className="grid side">
@@ -121,11 +141,13 @@ export function ExecClient({
         <div className="grid cols2" style={{ marginTop: 16 }}>
           <div className="card chartcard">
             <div className="card__h">
-              <h3>Collections by material</h3>
+              <h3>Orders by product</h3>
             </div>
             <div className="card__b">
-              {byMat.length ? (
-                byMat.map((m) => <Bar key={m.id} label={m.label} value={m.val} max={maxMat} color={m.color} unit={m.unit} />)
+              {byProduct.length ? (
+                byProduct.map((p) => (
+                  <Bar key={p.name} label={p.name} value={p.gal} max={maxProduct} color={p.color} unit="gal" />
+                ))
               ) : (
                 <Empty msg="No data yet." />
               )}

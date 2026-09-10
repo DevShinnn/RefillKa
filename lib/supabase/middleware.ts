@@ -1,6 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
-import { homeForRole, canAccess, type Role } from '@/lib/roles';
+import { FIELD_LOGIN, OPS_LOGIN, canAccess, homeForRole, loginPathFor, type Role } from '@/lib/roles';
 
 /**
  * Refreshes the Supabase session cookie on every request and guards routes
@@ -34,17 +34,15 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isLogin = path === '/login';
+  const isFieldLogin = path === FIELD_LOGIN;
 
-  // Not signed in → only /login is allowed.
   if (!user) {
-    if (isLogin) return response;
+    if (isFieldLogin || path === OPS_LOGIN) return response;
     const url = request.nextUrl.clone();
-    url.pathname = '/login';
+    url.pathname = loginPathFor(path);
     return NextResponse.redirect(url);
   }
 
-  // Signed in: resolve role (from profile) for routing decisions.
   const { data: profile } = await supabase
     .from('profiles')
     .select('role')
@@ -52,14 +50,12 @@ export async function updateSession(request: NextRequest) {
     .single();
   const role = (profile?.role ?? null) as Role | null;
 
-  // Signed in on /login or root → send to role home.
-  if (isLogin || path === '/') {
+  if (isFieldLogin || path === '/') {
     const url = request.nextUrl.clone();
     url.pathname = homeForRole(role);
     return NextResponse.redirect(url);
   }
 
-  // Enforce per-route role access.
   if (!canAccess(role, path)) {
     const url = request.nextUrl.clone();
     url.pathname = homeForRole(role);

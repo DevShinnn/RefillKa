@@ -5,71 +5,106 @@ import { signOut } from '@/app/login/actions';
 import type { LiveStatus } from '@/lib/hooks/useCollections';
 import { ROLE_LABEL, type Role } from '@/lib/roles';
 
-const STATUS_TEXT: Record<LiveStatus, string> = {
-  connecting: 'Connecting…',
-  live: 'Live',
-  offline: 'Offline',
-};
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return `${parts[0]?.[0] ?? ''}${parts[1]?.[0] ?? ''}`.toUpperCase() || 'C';
+}
 
 export function Topbar({
   role,
   name,
   meta,
+  officerId,
+  heading,
   status,
+  onMenu,
+  menuOpen,
 }: {
   role: Role;
   name: string;
   meta: string;
-  status: LiveStatus;
+  officerId?: string | null;
+  heading?: string;
+  status?: LiveStatus;
+  onMenu?: () => void;
+  menuOpen?: boolean;
 }) {
-  const toggleTheme = () => {
-    const el = document.documentElement;
-    const cur = el.getAttribute('data-theme');
-    const dark = cur ? cur === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-    const next = dark ? 'light' : 'dark';
-    el.setAttribute('data-theme', next);
-    try {
-      localStorage.setItem('refillka_theme', next);
-    } catch {}
-  };
+  const line = [officerId, ROLE_LABEL[role]].filter(Boolean).join(' · ');
 
   return (
     <header className="topbar">
       <div className="topbar__in">
-        <RefillMark size={30} />
-        <div style={{ fontSize: '1.25rem' }}>
-          <Wordmark />
-        </div>
-        <span className="by">Taguig Field Study</span>
-        <span className="rolechip">
-          <span className="dot" />
-          {ROLE_LABEL[role]}
-        </span>
-
-        <div className="spacer" />
-
-        <div className="livewrap" title={`Realtime: ${STATUS_TEXT[status]}`}>
-          <span className={`livedot ${status}`} />
-          {STATUS_TEXT[status]}
-        </div>
-        <div className="who">
-          <span className="n">{name}</span>
-          <span className="r">{meta}</span>
-        </div>
-
-        <button className="iconbtn" onClick={toggleTheme} title="Toggle theme" aria-label="Toggle theme">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <circle cx="12" cy="12" r="4" />
-            <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-          </svg>
-        </button>
-        <form action={signOut}>
-          <button className="iconbtn" type="submit" title="Sign out" aria-label="Sign out">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+        {onMenu && (
+          <button
+            className="iconbtn iconbtn--menu"
+            type="button"
+            onClick={onMenu}
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={menuOpen}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              {menuOpen ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
             </svg>
           </button>
-        </form>
+        )}
+        {heading ? (
+          <div className="topbar__page">{heading}</div>
+        ) : (
+          <>
+            <RefillMark size={26} />
+            <div className="topbar__mark">
+              <Wordmark />
+            </div>
+          </>
+        )}
+        <div className="spacer" />
+        <details className="profile">
+          <summary className="profile__btn" title={name}>
+            <span className="profile__av" aria-hidden="true">
+              {initials(name)}
+            </span>
+            <span className="profile__text">
+              <span className="n">{name}</span>
+              <span className="r">{line || meta}</span>
+            </span>
+            <svg className="profile__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </summary>
+          <div className="profile__menu">
+            <div className="profile__menu-head">
+              <span className="profile__av profile__av--lg" aria-hidden="true">
+                {initials(name)}
+              </span>
+              <div className="profile__menu-id">
+                <div className="profile__menu-name">{name}</div>
+                <div className="profile__menu-meta">{ROLE_LABEL[role]}</div>
+              </div>
+            </div>
+            <dl className="profile__facts">
+              {officerId && (
+                <div>
+                  <dt>ID</dt>
+                  <dd>{officerId}</dd>
+                </div>
+              )}
+              {meta && (
+                <div>
+                  <dt>Scope</dt>
+                  <dd>{meta}</dd>
+                </div>
+              )}
+            </dl>
+            <form action={signOut}>
+              <button className="profile__out" type="submit">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+                </svg>
+                Sign out
+              </button>
+            </form>
+          </div>
+        </details>
       </div>
     </header>
   );

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { homeForRole, type Role } from '@/lib/roles';
+import { FIELD_LOGIN, homeForRole, loginPathFor, type Role } from '@/lib/roles';
 import type { Profile } from '@/lib/types';
 
 /**
@@ -13,7 +13,8 @@ export async function requireProfile(allowed: Role[]) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const loginPath = allowed.includes('cenro') ? FIELD_LOGIN : loginPathFor('/admin');
+  if (!user) redirect(loginPath);
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -21,7 +22,7 @@ export async function requireProfile(allowed: Role[]) {
     .eq('id', user.id)
     .single<Profile>();
 
-  if (!profile) redirect('/login');
+  if (!profile) redirect(loginPath);
   if (!allowed.includes(profile.role)) redirect(homeForRole(profile.role));
 
   return { supabase, user, profile };

@@ -7,6 +7,7 @@ import type { Profile } from '@/lib/types';
  * they're operating within.
  */
 export async function scopeLabel(supabase: SupabaseClient, profile: Profile): Promise<string> {
+  if (profile.role === 'superadmin') return 'Developer · all LGUs';
   if (profile.role === 'national_admin' || profile.role === 'national_exec') return 'National';
 
   if (profile.role === 'regional_exec' && profile.region_id) {

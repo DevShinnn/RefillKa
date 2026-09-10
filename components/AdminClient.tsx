@@ -3,8 +3,10 @@
 import { useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useCollections } from '@/lib/hooks/useCollections';
-import { MATERIALS, materialById, toSachetEquiv, type Profile, type Store } from '@/lib/types';
-import { fmt, tstamp, isToday } from '@/lib/format';
+import { usePayments } from '@/lib/hooks/usePayments';
+import { MATERIALS, WEEKLY_INSTALLMENT, materialById, productById, type Payment, type Product, type Profile, type Store } from '@/lib/types';
+import { fmt, manilaYmd, peso, tstamp, isToday } from '@/lib/format';
+import { INSTALLMENT_WEEKS, installmentWeekFor, planPaidCount } from '@/lib/installments';
 import { Topbar } from './Topbar';
 import { Kpi, Empty, toast } from './ui';
 
@@ -12,18 +14,24 @@ export function AdminClient({
   profile,
   scope,
   stores,
+  products,
+  payments = [],
   initial,
 }: {
   profile: Profile;
   scope: string;
   stores: Store[];
+  products: Product[];
+  payments?: Payment[];
   initial: any[];
 }) {
   const { rows, status, setRows } = useCollections(initial);
+  const { rows: payRows } = usePayments(payments);
   const supabase = useMemo(() => createClient(), []);
 
   const [fStore, setFStore] = useState('');
   const [fMat, setFMat] = useState('');
+  const [fProduct, setFProduct] = useState('');
   const [q, setQ] = useState('');
 
   const storeById = (id: string) => stores.find((s) => s.id === id);
@@ -33,20 +41,27 @@ export function AdminClient({
     return rows.filter((r) => {
       if (fStore && r.store_id !== fStore) return false;
       if (fMat && r.material !== fMat) return false;
+      if (fProduct && r.product_id !== fProduct) return false;
       if (query) {
         const s = storeById(r.store_id);
-        const hay = [r.logged_by_name, s?.name, s?.barangay, r.notes, materialById(r.material).label]
+        const p = productById(products, r.product_id);
+        const hay = [r.logged_by_name, s?.name, s?.barangay, r.notes, p?.name, materialById(r.material).label]
           .join(' ')
           .toLowerCase();
         if (!hay.includes(query)) return false;
       }
       return true;
     });
-  }, [rows, fStore, fMat, q, stores]);
+  }, [rows, fStore, fMat, fProduct, q, stores, products]);
 
-  const activeStores = new Set(rows.map((r) => r.store_id)).size;
-  const contributors = new Set(rows.map((r) => r.logged_by)).size;
-  const sachet = rows.reduce((a, r) => a + toSachetEquiv(r), 0);
+  const currentWeek = installmentWeekFor(manilaYmd());
+  const collectedWeek = currentWeek
+    ? payRows
+        .filter((p) => p.week_start === currentWeek.start)
+        .reduce((a, p) => a + Number(p.amount), 0)
+    : 0;
+  const reorders = rows.filter((r) => r.is_reorder).length;
+  const willReorder = stores.filter((s) => s.will_reorder).length;
 
   const del = async (id: string) => {
     if (!confirm('Delete this entry? This cannot be undone.')) return;
@@ -56,18 +71,24 @@ export function AdminClient({
   };
 
   const exportCSV = () => {
-    const head = ['timestamp_iso', 'timestamp_local', 'store', 'barangay', 'channel', 'material', 'quantity', 'unit', 'logged_by', 'role', 'notes'];
+    const head = ['timestamp_iso', 'timestamp_local', 'store', 'barangay', 'channel', 'product', 'price_type', 'reorder', 'quantity', 'unit', 'unit_price', 'line_total', 'logged_by', 'role', 'notes'];
     const body = filtered.map((r) => {
       const s = storeById(r.store_id);
+      const p = productById(products, r.product_id);
+      const line = r.unit_price != null ? Number(r.unit_price) * Number(r.quantity) : '';
       return [
         r.collected_at,
         tstamp(r.created_at),
         s?.name ?? '',
         s?.barangay ?? '',
         s?.channel ?? '',
-        materialById(r.material).label,
+        p?.name ?? '',
+        r.product_id ? (r.with_container ? 'with container' : 'refill') : '',
+        r.is_reorder ? 'yes' : 'no',
         r.quantity,
         r.unit,
+        r.unit_price ?? '',
+        line,
         r.logged_by_name,
         r.logged_by_role,
         r.notes ?? '',
@@ -88,12 +109,12 @@ export function AdminClient({
 
   return (
     <div className="app">
-      <Topbar role={profile.role} name={profile.full_name || 'Admin'} meta={scope} status={status} />
+      <Topbar role={profile.role} name={profile.full_name || 'Admin'} meta={scope} officerId={profile.officer_id} status={status} />
       <main className="main">
         <div className="viewhead">
           <div>
-            <h1>Admin — All Collections</h1>
-            <p className="sub">Full live ledger across the field study. Filter, review, export, and correct entries.</p>
+            <h1>Admin — Sales monitoring</h1>
+            <p className="sub">Stores, weekly collections, refills and reorders across the field study.</p>
           </div>
           <button className="btn-sm" onClick={exportCSV}>
             ⭳ Export CSV
@@ -101,10 +122,66 @@ export function AdminClient({
         </div>
 
         <div className="kpis">
-          <Kpi label="Total entries" value={fmt(rows.length)} unit={`${rows.filter((r) => isToday(r.created_at)).length} logged today`} accent="var(--teal)" />
-          <Kpi label="Active stores" value={activeStores} unit={`of ${stores.length} in study`} accent="var(--green)" />
-          <Kpi label="Contributors" value={contributors} unit="CENRO + stores" accent="var(--blue)" />
-          <Kpi label="Sachet-equiv. diverted" value={fmt(sachet)} unit="weighted total" accent="var(--red)" />
+          <Kpi label="Stores" value={stores.length} unit={`${willReorder} will reorder`} accent="var(--green)" />
+          <Kpi label="Collections this week" value={peso(collectedWeek)} unit={`${peso(WEEKLY_INSTALLMENT)} × ${INSTALLMENT_WEEKS} weeks from Sep 11`} accent="var(--blue)" />
+          <Kpi label="Refill orders" value={fmt(rows.length)} unit={`${rows.filter((r) => isToday(r.created_at)).length} today`} accent="var(--teal)" />
+          <Kpi label="Reorders tagged" value={reorders} unit="repeat product orders" accent="var(--red)" />
+        </div>
+
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card__h">
+            <h3>Store accounts</h3>
+            <span className="tag">{stores.length}</span>
+          </div>
+          <div className="card__b" style={{ padding: '6px 8px' }}>
+            <div className="tablewrap">
+              {stores.length ? (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Store name</th>
+                      <th>Address</th>
+                      <th>Number</th>
+                      <th>Age</th>
+                      <th>Gender</th>
+                      <th>Collection {INSTALLMENT_WEEKS} weeks</th>
+                      <th>Reorder</th>
+                      <th>Feedback</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stores.map((s) => {
+                      const paidCount = planPaidCount(payRows, s.id, s.claimed_on);
+                      const paidNow =
+                        s.pay_plan !== 'fully_paid' &&
+                        currentWeek &&
+                        payRows.some((p) => p.store_id === s.id && p.week_start === currentWeek.start);
+                      return (
+                        <tr key={s.id}>
+                          <td>{s.name}</td>
+                          <td>{s.address || s.barangay || '—'}</td>
+                          <td>{s.phone || '—'}</td>
+                          <td>{s.age ?? '—'}</td>
+                          <td>{s.gender ?? '—'}</td>
+                          <td>
+                            {s.pay_plan === 'fully_paid' || paidCount >= INSTALLMENT_WEEKS
+                              ? 'Fully paid'
+                              : `${paidCount}/${INSTALLMENT_WEEKS}${currentWeek ? (paidNow ? ' · this week paid' : ' · this week due') : ''}`}
+                          </td>
+                          <td>{s.will_reorder === true ? 'Yes' : s.will_reorder === false ? 'No' : '—'}</td>
+                          <td style={{ maxWidth: 220, fontSize: '.78rem', color: 'var(--mid)' }}>
+                            {[s.feedback_product, s.feedback_service].filter(Boolean).join(' · ') || '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <Empty msg="No stores listed yet." />
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="toolbar">
@@ -116,6 +193,14 @@ export function AdminClient({
               </option>
             ))}
           </select>
+          <select value={fProduct} onChange={(e) => setFProduct(e.target.value)}>
+            <option value="">All products</option>
+            {products.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
           <select value={fMat} onChange={(e) => setFMat(e.target.value)}>
             <option value="">All materials</option>
             {MATERIALS.map((m) => (
@@ -124,12 +209,13 @@ export function AdminClient({
               </option>
             ))}
           </select>
-          <input className="grow" placeholder="Search officer, store, notes…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className="grow" placeholder="Search officer, store, product, notes…" value={q} onChange={(e) => setQ(e.target.value)} />
           <button
             className="btn-ghost"
             onClick={() => {
               setFStore('');
               setFMat('');
+              setFProduct('');
               setQ('');
             }}
           >
@@ -147,17 +233,19 @@ export function AdminClient({
                       <th>When</th>
                       <th>Store / source</th>
                       <th>Barangay</th>
-                      <th>Material</th>
+                      <th>Product</th>
                       <th className="num">Qty</th>
+                      <th className="num">Amount</th>
                       <th>Logged by</th>
                       <th aria-label="actions" />
                     </tr>
                   </thead>
                   <tbody>
                     {filtered.map((r) => {
-                      const m = materialById(r.material);
+                      const p = productById(products, r.product_id);
                       const s = storeById(r.store_id);
                       const roleClass = r.logged_by_role === 'cenro' ? 'role-cenro' : 'role-admin';
+                      const amount = r.unit_price != null ? Number(r.unit_price) * Number(r.quantity) : null;
                       return (
                         <tr key={r.id}>
                           <td className="tstamp">{tstamp(r.created_at)}</td>
@@ -167,13 +255,20 @@ export function AdminClient({
                           </td>
                           <td>
                             <span className="matpill">
-                              <span className="d" style={{ background: m.color }} />
-                              {m.label}
+                              <span className="d" style={{ background: p?.category === 'food' ? 'var(--yellow)' : 'var(--blue)' }} />
+                              {p?.name ?? materialById(r.material).label}
                             </span>
+                            {p && (
+                              <div style={{ fontSize: '.7rem', color: 'var(--light)', marginTop: 3 }}>
+                                {r.with_container ? 'with container' : 'price refill'}
+                                {r.is_reorder ? ' · reorder' : ''}
+                              </div>
+                            )}
                           </td>
                           <td className="num">
                             {fmt(r.quantity)} <span style={{ color: 'var(--light)', fontWeight: 400 }}>{r.unit}</span>
                           </td>
+                          <td className="num">{amount != null ? peso(amount) : '—'}</td>
                           <td>
                             <span className={`pill ${roleClass}`}>
                               <span className="d" />
