@@ -130,18 +130,11 @@ export function LoginBox({ portal }: { portal: 'field' | 'ops' }) {
         <details className="demoaccts">
           <summary>Demo account · sandbox only</summary>
           <p className="sub">Uses fake Demo sandbox stores. It cannot see or change Taguig data.</p>
-          <table>
-            <tbody>
-              <tr>
-                <td>{ops ? 'Admin' : 'Field'}</td>
-                <td>
-                  <code>{ops ? DEMO_OPS.officerId : DEMO_FIELD.officerId}</code>
-                  {' · PIN '}
-                  <code>{DEMO_PIN}</code>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <div className="demoaccts__cred">
+            <span>{ops ? 'Admin' : 'Field'}</span>
+            <code>{ops ? DEMO_OPS.officerId : DEMO_FIELD.officerId}</code>
+            <span>PIN {DEMO_PIN}</span>
+          </div>
           <button
             className="btn login__demo"
             type="button"

@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { useCollections } from '@/lib/hooks/useCollections';
 import { PILOT_TARGET, WEEKLY_INSTALLMENT, productById, toSachetEquiv, type Payment, type Product, type Profile, type Store } from '@/lib/types';
 import { fmt, manilaYmd, peso } from '@/lib/format';
+import { withoutDemoRows, withoutDemoStores } from '@/lib/demo';
 import { INSTALLMENT_WEEKS, installmentWeekFor } from '@/lib/installments';
 import { usePayments } from '@/lib/hooks/usePayments';
 import { Topbar } from './Topbar';
@@ -14,7 +15,7 @@ const BRGY_COLORS = ['#2E7D4F', '#2390C9', '#2A7C78', '#DC2F29', '#B8860B', '#8a
 export function ExecClient({
   profile,
   scope,
-  stores,
+  stores: allStores,
   products,
   payments = [],
   initial,
@@ -26,8 +27,11 @@ export function ExecClient({
   payments?: Payment[];
   initial: any[];
 }) {
-  const { rows, status } = useCollections(initial);
-  const { rows: payRows } = usePayments(payments);
+  const stores = withoutDemoStores(allStores);
+  const { rows: liveOrders, status } = useCollections(initial);
+  const { rows: livePays } = usePayments(payments);
+  const rows = withoutDemoRows(liveOrders, allStores);
+  const payRows = withoutDemoRows(livePays, allStores);
 
   const sachet = rows.reduce((a, r) => a + toSachetEquiv(r), 0);
   const pct = Math.min(100, (sachet / PILOT_TARGET) * 100);

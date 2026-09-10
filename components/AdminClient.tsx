@@ -6,6 +6,7 @@ import { useCollections } from '@/lib/hooks/useCollections';
 import { usePayments } from '@/lib/hooks/usePayments';
 import { MATERIALS, WEEKLY_INSTALLMENT, materialById, productById, type Payment, type Product, type Profile, type Store } from '@/lib/types';
 import { fmt, manilaYmd, peso, tstamp, isToday } from '@/lib/format';
+import { withoutDemoRows, withoutDemoStores } from '@/lib/demo';
 import { INSTALLMENT_WEEKS, installmentWeekFor, planPaidCount } from '@/lib/installments';
 import { Topbar } from './Topbar';
 import { Kpi, Empty, toast } from './ui';
@@ -13,7 +14,7 @@ import { Kpi, Empty, toast } from './ui';
 export function AdminClient({
   profile,
   scope,
-  stores,
+  stores: allStores,
   products,
   payments = [],
   initial,
@@ -25,8 +26,11 @@ export function AdminClient({
   payments?: Payment[];
   initial: any[];
 }) {
-  const { rows, status, setRows } = useCollections(initial);
-  const { rows: payRows } = usePayments(payments);
+  const stores = withoutDemoStores(allStores);
+  const { rows: liveOrders, status, setRows } = useCollections(initial);
+  const { rows: livePays } = usePayments(payments);
+  const rows = withoutDemoRows(liveOrders, allStores);
+  const payRows = withoutDemoRows(livePays, allStores);
   const supabase = useMemo(() => createClient(), []);
 
   const [fStore, setFStore] = useState('');
