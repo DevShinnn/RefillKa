@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "seed:users": "node scripts/seed-users.mjs",
-    "ensure:dev": "node scripts/ensure-dev.mjs"
+    "ensure:dev": "node scripts/ensure-dev.mjs",
+    "deploy": "node scripts/deploy-vercel.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
