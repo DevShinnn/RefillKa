@@ -3,13 +3,13 @@ import { requireProfile } from '@/lib/auth';
 import { scopeLabel } from '@/lib/scope';
 import type { Collection, Payment, Product, Store } from '@/lib/types';
 import { ExecClient } from '@/components/ExecClient';
-import ExecutiveLoading from './loading';
+import { PageLoading } from '@/components/PageLoading';
 
 export const dynamic = 'force-dynamic';
 
 export default function ExecutivePage() {
   return (
-    <Suspense fallback={<ExecutiveLoading />}>
+    <Suspense fallback={<PageLoading label="Opening executive…" />}>
       <ExecutiveApp />
     </Suspense>
   );

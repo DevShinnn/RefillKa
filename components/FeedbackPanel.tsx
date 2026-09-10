@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { useState } from 'react';
+import { persistAppFeedback, removeAppFeedback } from '@/app/ops/actions';
 import { tstamp } from '@/lib/format';
 import { useAppFeedback } from '@/lib/hooks/useAppFeedback';
 import { repliesFor, useFeedbackReplies } from '@/lib/hooks/useFeedbackReplies';
@@ -15,7 +15,6 @@ function topicLabel(topic: AppFeedbackTopic): string {
 }
 
 export function FeedbackPanel({ profile }: { profile: Profile }) {
-  const supabase = useMemo(() => createClient(), []);
   const { rows, setRows } = useAppFeedback();
   const { rows: replies } = useFeedbackReplies();
   const [topic, setTopic] = useState<AppFeedbackTopic>('suggestion');
@@ -27,26 +26,17 @@ export function FeedbackPanel({ profile }: { profile: Profile }) {
     const text = note.trim();
     if (!text) return toast('Write a suggestion first');
     setBusy(true);
-    const { data, error } = await supabase
-      .from('app_feedback')
-      .insert({
-        topic,
-        note: text,
-        logged_by: profile.id,
-        logged_by_role: profile.role,
-      })
-      .select('*')
-      .single();
+    const result = await persistAppFeedback({ topic, note: text });
     setBusy(false);
-    if (error || !data) {
+    if (result.error || !result.feedback) {
       toast(
-        /app_feedback|schema cache|does not exist/i.test(error?.message || '')
+        /app_feedback|schema cache|does not exist/i.test(result.error || '')
           ? 'Feedback table is not set up yet. Apply migration 0010_app_feedback.sql.'
-          : error?.message || 'Could not send'
+          : result.error || 'Could not send'
       );
       return;
     }
-    setRows((prev) => [data as AppFeedback, ...prev.filter((r) => r.id !== data.id)]);
+    setRows((prev) => [result.feedback!, ...prev.filter((r) => r.id !== result.feedback!.id)]);
     setNote('');
     toast('Suggestion sent');
   };
@@ -54,10 +44,10 @@ export function FeedbackPanel({ profile }: { profile: Profile }) {
   const confirmDelete = async () => {
     if (!remove) return;
     setBusy(true);
-    const { error } = await supabase.from('app_feedback').delete().eq('id', remove.id);
+    const result = await removeAppFeedback(remove.id);
     setBusy(false);
-    if (error) {
-      toast('Could not delete');
+    if (result.error) {
+      toast(result.error || 'Could not delete');
       return;
     }
     setRows((prev) => prev.filter((r) => r.id !== remove.id));

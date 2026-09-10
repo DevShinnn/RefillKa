@@ -6,7 +6,7 @@ import { scopeLabel } from '@/lib/scope';
 import type { AppFeedback, Collection, FeedbackReply, Lgu, Payment, Product, Profile, Region, Store, StoreFeedback } from '@/lib/types';
 import { OpsConsole } from '@/components/OpsConsole';
 import { LoginBox } from '@/components/LoginBox';
-import OpsLoading from './loading';
+import { PageLoading } from '@/components/PageLoading';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +18,7 @@ export default async function OpsPage() {
   if (!session?.user) return <LoginBox portal="ops" />;
 
   return (
-    <Suspense fallback={<OpsLoading />}>
+    <Suspense fallback={<PageLoading label="Opening operations…" />}>
       <OpsApp />
     </Suspense>
   );

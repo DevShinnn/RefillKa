@@ -3,13 +3,13 @@ import { requireProfile } from '@/lib/auth';
 import { scopeLabel } from '@/lib/scope';
 import type { Collection, Payment, Product, Store } from '@/lib/types';
 import { AdminClient } from '@/components/AdminClient';
-import AdminLoading from './loading';
+import { PageLoading } from '@/components/PageLoading';
 
 export const dynamic = 'force-dynamic';
 
 export default function AdminPage() {
   return (
-    <Suspense fallback={<AdminLoading />}>
+    <Suspense fallback={<PageLoading label="Opening admin…" />}>
       <AdminApp />
     </Suspense>
   );

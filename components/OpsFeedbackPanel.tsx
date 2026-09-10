@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { useState } from 'react';
+import { persistFeedbackReply } from '@/app/ops/actions';
 import { tstamp } from '@/lib/format';
 import { repliesFor } from '@/lib/hooks/useFeedbackReplies';
 import { storeDisplayName } from '@/lib/storeProfile';
@@ -42,7 +42,6 @@ export function OpsFeedbackPanel({
   busy: boolean;
   setBusy: (v: boolean) => void;
 }) {
-  const supabase = useMemo(() => createClient(), []);
   const [source, setSource] = useState<Source>('stores');
   const [q, setQ] = useState('');
   const [openStoreId, setOpenStoreId] = useState<string | null>(null);
@@ -86,21 +85,21 @@ export function OpsFeedbackPanel({
     const note = draft.trim();
     if (!note) return;
     setBusy(true);
-    const insert =
+    const result = await persistFeedbackReply(
       source === 'stores'
-        ? supabase.from('feedback_replies').insert({ store_feedback_id: openId, note, logged_by: profile.id })
-        : supabase.from('feedback_replies').insert({ app_feedback_id: openId, note, logged_by: profile.id });
-    const { data, error } = await insert.select('*').single();
+        ? { storeFeedbackId: openId, note }
+        : { appFeedbackId: openId, note }
+    );
     setBusy(false);
-    if (error || !data) {
+    if (result.error || !result.reply) {
       toast(
-        /feedback_replies|schema cache|does not exist/i.test(error?.message || '')
+        /feedback_replies|schema cache|does not exist/i.test(result.error || '')
           ? 'Reply table is missing. Apply migration 0012_feedback_replies.sql.'
-          : error?.message || 'Could not send reply'
+          : result.error || 'Could not send reply'
       );
       return;
     }
-    setReplies((prev) => [...prev.filter((r) => r.id !== data.id), data as FeedbackReply]);
+    setReplies((prev) => [...prev.filter((r) => r.id !== result.reply!.id), result.reply!]);
     setDraft('');
     toast('Reply sent');
   };

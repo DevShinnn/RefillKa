@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { persistStore } from '@/app/ops/actions';
+import { persistStore, persistStoreFeedback, removeStoreFeedback } from '@/app/ops/actions';
 import { createClient } from '@/lib/supabase/client';
 import { useCollections } from '@/lib/hooks/useCollections';
 import { usePayments } from '@/lib/hooks/usePayments';
@@ -488,46 +488,30 @@ export function CrmClient({
     const note = feedbackNote.trim();
     if (!note) return toast('Write the feedback first');
     setBusy(true);
-    const { data, error } = await supabase
-      .from('store_feedback')
-      .insert({
-        store_id: store.id,
-        topic: feedbackTopic,
-        note,
-        logged_by: profile.id,
-        logged_by_role: profile.role,
-      })
-      .select('*')
-      .single();
-    if (!error && data) {
-      const posted = data as StoreFeedback;
-      setFeedbackRows((prev) => [posted, ...prev.filter((r) => r.id !== posted.id)]);
-      const latest =
-        feedbackTopic === 'product'
-          ? { feedback_product: note }
-          : feedbackTopic === 'service'
-            ? { feedback_service: note }
-            : null;
-      if (latest) {
-        const saved = await persistStore({ id: store.id, lguId: store.lgu_id, patch: latest });
-        setStores((prev) => prev.map((s) => (s.id === store.id ? (saved.store ?? { ...s, ...latest }) : s)));
-      }
-      setFeedbackNote('');
-      toast('Feedback posted');
-    } else {
-      toast(error?.message?.includes('store_feedback') ? 'Feedback table is not set up yet' : 'Could not post feedback');
-    }
+    const result = await persistStoreFeedback({ storeId: store.id, topic: feedbackTopic, note });
     setBusy(false);
+    if (result.error || !result.feedback) {
+      toast(
+        /store_feedback|schema cache|does not exist/i.test(result.error || '')
+          ? 'Feedback table is not set up yet'
+          : result.error || 'Could not post feedback'
+      );
+      return;
+    }
+    setFeedbackRows((prev) => [result.feedback!, ...prev.filter((r) => r.id !== result.feedback!.id)]);
+    if (result.store) setStores((prev) => prev.map((s) => (s.id === store.id ? result.store! : s)));
+    setFeedbackNote('');
+    toast('Feedback posted');
   };
 
   const deleteFeedback = async () => {
     if (!feedbackDelete) return;
     const id = feedbackDelete.id;
     setBusy(true);
-    const { error } = await supabase.from('store_feedback').delete().eq('id', id);
+    const result = await removeStoreFeedback(id);
     setBusy(false);
-    if (error) {
-      toast('Could not delete feedback');
+    if (result.error) {
+      toast(result.error || 'Could not delete feedback');
       return;
     }
     setFeedbackRows((prev) => prev.filter((r) => r.id !== id));

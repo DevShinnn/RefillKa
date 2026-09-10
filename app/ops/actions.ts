@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { loginToEmail, normalizeOfficerId } from '@/lib/loginId';
 import { ASSIGNABLE_ROLES, roleNeedsLgu, roleNeedsRegion, type Role } from '@/lib/roles';
 import { createClient as createJsClient } from '@supabase/supabase-js';
-import type { Profile, Store } from '@/lib/types';
+import type { AppFeedback, AppFeedbackTopic, FeedbackReply, FeedbackTopic, Profile, Store, StoreFeedback } from '@/lib/types';
 import { usageLines, usageTotal, type AccountUsage } from '@/lib/opsUsage';
 
 export type AccountInput = {
@@ -233,6 +233,136 @@ export async function resetPin(userId: string, pin: string): Promise<{ error: st
   }
 }
 
+async function requireSignedIn() {
+  const supabase = await createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.user) return { ok: false as const, error: 'Not signed in' };
+  return { ok: true as const, user: session.user, supabase };
+}
+
+function adminOrError() {
+  try {
+    return { ok: true as const, admin: createAdminClient() };
+  } catch (err) {
+    return { ok: false as const, error: err instanceof Error ? err.message : 'Server admin key is missing' };
+  }
+}
+
+export async function persistStoreFeedback(input: {
+  storeId: string;
+  topic: FeedbackTopic;
+  note: string;
+}): Promise<{ error: string | null; feedback?: StoreFeedback; store?: Store }> {
+  const gate = await requireSignedIn();
+  if (!gate.ok) return { error: gate.error };
+  const note = input.note.trim();
+  if (!input.storeId) return { error: 'Save the store first' };
+  if (!note) return { error: 'Write the feedback first' };
+
+  const adminGate = adminOrError();
+  if (!adminGate.ok) return { error: adminGate.error };
+
+  const { data: profile } = await adminGate.admin.from('profiles').select('role,lgu_id').eq('id', gate.user.id).single();
+  const { data: feedback, error } = await adminGate.admin
+    .from('store_feedback')
+    .insert({
+      store_id: input.storeId,
+      topic: input.topic,
+      note,
+      logged_by: gate.user.id,
+      logged_by_role: profile?.role || 'cenro',
+    })
+    .select('*')
+    .single<StoreFeedback>();
+  if (error || !feedback) return { error: error?.message || 'Could not post feedback' };
+
+  let store: Store | undefined;
+  if (input.topic === 'product' || input.topic === 'service') {
+    const patch = input.topic === 'product' ? { feedback_product: note } : { feedback_service: note };
+    const { data: saved } = await adminGate.admin.from('stores').update(patch).eq('id', input.storeId).select('*').single<Store>();
+    store = saved ?? undefined;
+  }
+
+  return { error: null, feedback, store };
+}
+
+export async function persistAppFeedback(input: {
+  topic: AppFeedbackTopic;
+  note: string;
+}): Promise<{ error: string | null; feedback?: AppFeedback }> {
+  const gate = await requireSignedIn();
+  if (!gate.ok) return { error: gate.error };
+  const note = input.note.trim();
+  if (!note) return { error: 'Write a suggestion first' };
+
+  const adminGate = adminOrError();
+  if (!adminGate.ok) return { error: adminGate.error };
+
+  const { data: profile } = await adminGate.admin.from('profiles').select('role').eq('id', gate.user.id).single();
+  const { data, error } = await adminGate.admin
+    .from('app_feedback')
+    .insert({
+      topic: input.topic,
+      note,
+      logged_by: gate.user.id,
+      logged_by_role: profile?.role || 'cenro',
+    })
+    .select('*')
+    .single<AppFeedback>();
+  if (error || !data) return { error: error?.message || 'Could not send feedback' };
+  return { error: null, feedback: data };
+}
+
+export async function persistFeedbackReply(input: {
+  storeFeedbackId?: string | null;
+  appFeedbackId?: string | null;
+  note: string;
+}): Promise<{ error: string | null; reply?: FeedbackReply }> {
+  const gate = await requireSignedIn();
+  if (!gate.ok) return { error: gate.error };
+  const note = input.note.trim();
+  if (!note) return { error: 'Write a reply first' };
+  if (!input.storeFeedbackId && !input.appFeedbackId) return { error: 'Pick a note to reply to' };
+
+  const adminGate = adminOrError();
+  if (!adminGate.ok) return { error: adminGate.error };
+
+  const { data: profile } = await adminGate.admin.from('profiles').select('role').eq('id', gate.user.id).single();
+  const { data, error } = await adminGate.admin
+    .from('feedback_replies')
+    .insert({
+      store_feedback_id: input.storeFeedbackId || null,
+      app_feedback_id: input.appFeedbackId || null,
+      note,
+      logged_by: gate.user.id,
+      logged_by_role: profile?.role || 'superadmin',
+    })
+    .select('*')
+    .single<FeedbackReply>();
+  if (error || !data) return { error: error?.message || 'Could not send reply' };
+  return { error: null, reply: data };
+}
+
+export async function removeStoreFeedback(id: string): Promise<{ error: string | null }> {
+  const gate = await requireSignedIn();
+  if (!gate.ok) return { error: gate.error };
+  const adminGate = adminOrError();
+  if (!adminGate.ok) return { error: adminGate.error };
+  const { error } = await adminGate.admin.from('store_feedback').delete().eq('id', id);
+  return { error: error?.message ?? null };
+}
+
+export async function removeAppFeedback(id: string): Promise<{ error: string | null }> {
+  const gate = await requireSignedIn();
+  if (!gate.ok) return { error: gate.error };
+  const adminGate = adminOrError();
+  if (!adminGate.ok) return { error: adminGate.error };
+  const { error } = await adminGate.admin.from('app_feedback').delete().eq('id', id);
+  return { error: error?.message ?? null };
+}
+
 export async function persistStore(input: {
   id?: string | null;
   lguId: string;
@@ -240,11 +370,8 @@ export async function persistStore(input: {
   willReorder?: boolean | null;
   patch: Record<string, unknown>;
 }): Promise<{ error: string | null; store?: Store }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: 'Not signed in' };
+  const gate = await requireSignedIn();
+  if (!gate.ok) return { error: gate.error };
 
   if (!input.lguId) return { error: 'Choose an LGU' };
 

@@ -3,13 +3,13 @@ import { requireProfile } from '@/lib/auth';
 import { scopeLabel } from '@/lib/scope';
 import type { Collection, Payment, Product, Store } from '@/lib/types';
 import { CrmClient } from '@/components/CrmClient';
-import LogLoading from './loading';
+import { PageLoading } from '@/components/PageLoading';
 
 export const dynamic = 'force-dynamic';
 
 export default function LogPage() {
   return (
-    <Suspense fallback={<LogLoading />}>
+    <Suspense fallback={<PageLoading label="Opening field CRM…" />}>
       <LogApp />
     </Suspense>
   );
