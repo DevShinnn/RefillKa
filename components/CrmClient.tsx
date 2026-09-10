@@ -1161,7 +1161,7 @@ export function CrmClient({
           />
         )}
 
-        {tab === 'feedback' && <FeedbackPanel profile={profile} />}
+        {tab === 'feedback' && <FeedbackPanel profile={profile} replies={feedbackReplies} />}
 
         {tab === 'report' && canSeeReport && (
           <ReportPanel

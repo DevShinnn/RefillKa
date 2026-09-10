@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { AppFeedback } from '@/lib/types';
+import { listenTable } from './realtime';
 
 export function useAppFeedback(initial: AppFeedback[] = []) {
   const [rows, setRows] = useState<AppFeedback[]>(initial);
@@ -15,33 +16,33 @@ export function useAppFeedback(initial: AppFeedback[] = []) {
     const sortDesc = (a: AppFeedback, b: AppFeedback) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
 
-    const load = async () => {
-      const { data } = await sb.from('app_feedback').select('*').order('created_at', { ascending: false }).limit(200);
-      if (active && data) setRows((data as AppFeedback[]).slice().sort(sortDesc));
-    };
-    load();
+    void sb
+      .from('app_feedback')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(200)
+      .then(({ data }) => {
+        if (active && data) setRows((data as AppFeedback[]).slice().sort(sortDesc));
+      });
 
-    const channel = sb
-      .channel('app-feedback')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_feedback' }, (payload) => {
-        if (!active) return;
-        setRows((prev) => {
-          let next = prev;
-          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            const row = payload.new as AppFeedback;
-            next = [row, ...prev.filter((r) => r.id !== row.id)];
-          } else if (payload.eventType === 'DELETE') {
-            const old = payload.old as { id: string };
-            next = prev.filter((r) => r.id !== old.id);
-          }
-          return next.slice().sort(sortDesc);
-        });
-      })
-      .subscribe();
+    const channel = listenTable(sb, 'app_feedback', (payload) => {
+      if (!active) return;
+      setRows((prev) => {
+        let next = prev;
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          const row = payload.new as unknown as AppFeedback;
+          next = [row, ...prev.filter((r) => r.id !== row.id)];
+        } else if (payload.eventType === 'DELETE') {
+          const old = payload.old as { id: string };
+          next = prev.filter((r) => r.id !== old.id);
+        }
+        return next.slice().sort(sortDesc);
+      });
+    });
 
     return () => {
       active = false;
-      sb.removeChannel(channel);
+      void sb.removeChannel(channel);
     };
   }, []);
 

@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { persistAppFeedback, removeAppFeedback } from '@/app/ops/actions';
 import { tstamp } from '@/lib/format';
 import { useAppFeedback } from '@/lib/hooks/useAppFeedback';
-import { repliesFor, useFeedbackReplies } from '@/lib/hooks/useFeedbackReplies';
-import type { AppFeedback, AppFeedbackTopic, Profile } from '@/lib/types';
+import { repliesFor } from '@/lib/hooks/useFeedbackReplies';
+import type { AppFeedback, AppFeedbackTopic, FeedbackReply, Profile } from '@/lib/types';
 import { Empty, toast } from './ui';
 
 function topicLabel(topic: AppFeedbackTopic): string {
@@ -14,9 +14,14 @@ function topicLabel(topic: AppFeedbackTopic): string {
   return 'Suggestion';
 }
 
-export function FeedbackPanel({ profile }: { profile: Profile }) {
+export function FeedbackPanel({
+  profile,
+  replies,
+}: {
+  profile: Profile;
+  replies: FeedbackReply[];
+}) {
   const { rows, setRows } = useAppFeedback();
-  const { rows: replies } = useFeedbackReplies();
   const [topic, setTopic] = useState<AppFeedbackTopic>('suggestion');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);

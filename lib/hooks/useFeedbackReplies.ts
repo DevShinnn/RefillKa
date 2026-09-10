@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { FeedbackReply } from '@/lib/types';
+import { listenTable } from './realtime';
 
 export function useFeedbackReplies(initial: FeedbackReply[] = []) {
   const [rows, setRows] = useState<FeedbackReply[]>(initial);
@@ -15,33 +16,34 @@ export function useFeedbackReplies(initial: FeedbackReply[] = []) {
     const sortAsc = (a: FeedbackReply, b: FeedbackReply) =>
       new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
 
-    const load = async () => {
-      const { data } = await sb.from('feedback_replies').select('*').order('created_at').limit(1000);
-      if (active && data) setRows((data as FeedbackReply[]).slice().sort(sortAsc));
+    const apply = (payload: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
+      if (!active) return;
+      setRows((prev) => {
+        let next = prev;
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          const row = payload.new as unknown as FeedbackReply;
+          next = [...prev.filter((r) => r.id !== row.id), row];
+        } else if (payload.eventType === 'DELETE') {
+          const old = payload.old as { id: string };
+          next = prev.filter((r) => r.id !== old.id);
+        }
+        return next.slice().sort(sortAsc);
+      });
     };
-    load();
 
-    const channel = sb
-      .channel('feedback-replies')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'feedback_replies' }, (payload) => {
-        if (!active) return;
-        setRows((prev) => {
-          let next = prev;
-          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            const row = payload.new as FeedbackReply;
-            next = [...prev.filter((r) => r.id !== row.id), row];
-          } else if (payload.eventType === 'DELETE') {
-            const old = payload.old as { id: string };
-            next = prev.filter((r) => r.id !== old.id);
-          }
-          return next.slice().sort(sortAsc);
-        });
-      })
-      .subscribe();
+    void sb
+      .from('feedback_replies')
+      .select('*')
+      .order('created_at')
+      .limit(1000)
+      .then(({ data }) => {
+        if (active && data) setRows((data as FeedbackReply[]).slice().sort(sortAsc));
+      });
 
+    const channel = listenTable(sb, 'feedback_replies', apply);
     return () => {
       active = false;
-      sb.removeChannel(channel);
+      void sb.removeChannel(channel);
     };
   }, []);
 

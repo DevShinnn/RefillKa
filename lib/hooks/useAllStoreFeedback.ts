@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { StoreFeedback } from '@/lib/types';
+import { listenTable } from './realtime';
 
 export function useAllStoreFeedback(initial: StoreFeedback[] = []) {
   const [rows, setRows] = useState<StoreFeedback[]>(initial);
@@ -21,23 +22,20 @@ export function useAllStoreFeedback(initial: StoreFeedback[] = []) {
     };
     load();
 
-    const channel = sb
-      .channel('store-feedback-all')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'store_feedback' }, (payload) => {
-        if (!active) return;
-        setRows((prev) => {
-          let next = prev;
-          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            const row = payload.new as StoreFeedback;
-            next = [row, ...prev.filter((r) => r.id !== row.id)];
-          } else if (payload.eventType === 'DELETE') {
-            const old = payload.old as { id: string };
-            next = prev.filter((r) => r.id !== old.id);
-          }
-          return next.slice().sort(sortDesc);
-        });
-      })
-      .subscribe();
+    const channel = listenTable(sb, 'store_feedback', (payload) => {
+      if (!active) return;
+      setRows((prev) => {
+        let next = prev;
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          const row = payload.new as unknown as StoreFeedback;
+          next = [row, ...prev.filter((r) => r.id !== row.id)];
+        } else if (payload.eventType === 'DELETE') {
+          const old = payload.old as { id: string };
+          next = prev.filter((r) => r.id !== old.id);
+        }
+        return next.slice().sort(sortDesc);
+      });
+    });
 
     return () => {
       active = false;
