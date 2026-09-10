@@ -11,16 +11,15 @@ import {
   downloadFile,
   reorderTally,
 } from '@/lib/report';
-import { withoutDemoRows, withoutDemoStores } from '@/lib/demo';
 import { storeDisplayName } from '@/lib/storeProfile';
 import { type Collection, type Payment, type Product, type Store } from '@/lib/types';
 import { Empty, toast } from './ui';
 
 export function ReportPanel({
-  stores: allStores,
+  stores,
   products,
-  orders: allOrders,
-  payments: allPayments,
+  orders,
+  payments,
   officer,
   officerId,
   scope,
@@ -33,9 +32,6 @@ export function ReportPanel({
   officerId?: string | null;
   scope: string;
 }) {
-  const stores = withoutDemoStores(allStores);
-  const orders = withoutDemoRows(allOrders, allStores);
-  const payments = withoutDemoRows(allPayments, allStores);
   const generated = `${manilaDateLabel()} · ${manilaTimeLabel()}`;
   const day = manilaYmd();
   const tally = reorderTally(orders, products);

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { persistStore, persistStoreFeedback, removeStoreFeedback } from '@/app/ops/actions';
+import { splitLiveData } from '@/lib/demo';
 import { createClient } from '@/lib/supabase/client';
 import { useCollections } from '@/lib/hooks/useCollections';
 import { usePayments } from '@/lib/hooks/usePayments';
@@ -13,6 +14,7 @@ import {
   productPrice,
   type Collection,
   type FeedbackTopic,
+  type Lgu,
   type Payment,
   type Product,
   type Profile,
@@ -70,6 +72,7 @@ export function CrmClient({
   products,
   orders,
   payments: initialPayments,
+  lgus = [],
 }: {
   profile: Profile;
   scope: string;
@@ -77,15 +80,15 @@ export function CrmClient({
   products: Product[];
   orders: Collection[];
   payments: Payment[];
+  lgus?: Lgu[];
 }) {
-  const { rows: orderRows, status, setRows: setOrderRows } = useCollections(orders);
-  const { rows: payRows, setRows: setPayRows } = usePayments(initialPayments);
+  const { rows: liveOrders, status, setRows: setOrderRows } = useCollections(orders);
+  const { rows: livePays, setRows: setPayRows } = usePayments(initialPayments);
   const supabase = useMemo(() => createClient(), []);
 
   const [screen, setScreen] = useState<Screen>('list');
   const [tab, setTab] = useState<Tab>('stores');
   const [navOpen, setNavOpen] = useState(false);
-  const reorderCount = orderRows.filter(isPendingOrder).length;
   const canSeeReport = isDeveloper(profile.role);
 
   const go = (next: Tab) => {
@@ -114,7 +117,15 @@ export function CrmClient({
       window.removeEventListener('keydown', onKey);
     };
   }, [navOpen]);
-  const [stores, setStores] = useState<Store[]>(initialStores);
+  const [storeState, setStores] = useState<Store[]>(initialStores);
+  const scoped = useMemo(
+    () => splitLiveData(profile, { stores: storeState, orders: liveOrders, payments: livePays, lgus }),
+    [profile, storeState, liveOrders, livePays, lgus]
+  );
+  const stores = scoped.stores;
+  const orderRows = scoped.orders;
+  const payRows = scoped.payments;
+  const reorderCount = orderRows.filter(isPendingOrder).length;
   const [openId, setOpenId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editDetails, setEditDetails] = useState(false);

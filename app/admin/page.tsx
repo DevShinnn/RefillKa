@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import { requireProfile } from '@/lib/auth';
 import { scopeLabel } from '@/lib/scope';
-import type { Collection, Payment, Product, Store } from '@/lib/types';
+import type { Collection, Lgu, Payment, Product, Store } from '@/lib/types';
 import { AdminClient } from '@/components/AdminClient';
 import { PageLoading } from '@/components/PageLoading';
 
@@ -18,11 +18,12 @@ export default function AdminPage() {
 async function AdminApp() {
   const { supabase, profile } = await requireProfile(['superadmin', 'lgu_admin', 'national_admin']);
 
-  const [{ data: stores }, { data: products }, { data: collections }, { data: payments }, scope] = await Promise.all([
+  const [{ data: stores }, { data: products }, { data: collections }, { data: payments }, { data: lgus }, scope] = await Promise.all([
     supabase.from('stores').select('*').order('name'),
     supabase.from('products').select('*').eq('active', true).order('sort_order'),
     supabase.from('collections').select('*').order('created_at', { ascending: false }).limit(1000),
     supabase.from('payments').select('*').order('created_at', { ascending: false }).limit(1000),
+    supabase.from('lgus').select('*').order('name'),
     scopeLabel(supabase, profile),
   ]);
 
@@ -34,6 +35,7 @@ async function AdminApp() {
       products={(products as Product[]) ?? []}
       payments={(payments as Payment[]) ?? []}
       initial={(collections as Collection[]) ?? []}
+      lgus={(lgus as Lgu[]) ?? []}
     />
   );
 }

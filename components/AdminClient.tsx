@@ -4,9 +4,9 @@ import { useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useCollections } from '@/lib/hooks/useCollections';
 import { usePayments } from '@/lib/hooks/usePayments';
-import { MATERIALS, WEEKLY_INSTALLMENT, materialById, productById, type Payment, type Product, type Profile, type Store } from '@/lib/types';
+import { MATERIALS, WEEKLY_INSTALLMENT, materialById, productById, type Lgu, type Payment, type Product, type Profile, type Store } from '@/lib/types';
 import { fmt, manilaYmd, peso, tstamp, isToday } from '@/lib/format';
-import { withoutDemoRows, withoutDemoStores } from '@/lib/demo';
+import { splitLiveData } from '@/lib/demo';
 import { INSTALLMENT_WEEKS, installmentWeekFor, planPaidCount } from '@/lib/installments';
 import { Topbar } from './Topbar';
 import { Kpi, Empty, toast } from './ui';
@@ -18,6 +18,7 @@ export function AdminClient({
   products,
   payments = [],
   initial,
+  lgus = [],
 }: {
   profile: Profile;
   scope: string;
@@ -25,12 +26,14 @@ export function AdminClient({
   products: Product[];
   payments?: Payment[];
   initial: any[];
+  lgus?: Lgu[];
 }) {
-  const stores = withoutDemoStores(allStores);
   const { rows: liveOrders, status, setRows } = useCollections(initial);
   const { rows: livePays } = usePayments(payments);
-  const rows = withoutDemoRows(liveOrders, allStores);
-  const payRows = withoutDemoRows(livePays, allStores);
+  const scoped = splitLiveData(profile, { stores: allStores, orders: liveOrders, payments: livePays, lgus });
+  const stores = scoped.stores;
+  const rows = scoped.orders;
+  const payRows = scoped.payments;
   const supabase = useMemo(() => createClient(), []);
 
   const [fStore, setFStore] = useState('');

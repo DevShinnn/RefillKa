@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { persistStore } from '@/app/ops/actions';
+import { mergeScopedRows, splitLiveData } from '@/lib/demo';
 import { createClient } from '@/lib/supabase/client';
 import { useCollections } from '@/lib/hooks/useCollections';
 import { usePayments } from '@/lib/hooks/usePayments';
@@ -77,13 +78,60 @@ export function OpsConsole({
   replies: FeedbackReply[];
 }) {
   const supabase = useMemo(() => createClient(), []);
-  const { rows: orderRows, setRows: setOrderRows } = useCollections(orders);
-  const { rows: payRows, setRows: setPayRows } = usePayments(payments);
-  const { rows: storeNotes } = useAllStoreFeedback(initialStoreNotes);
-  const { rows: appNotes } = useAppFeedback(initialAppNotes);
-  const { rows: replies, setRows: setReplies } = useFeedbackReplies(initialReplies);
-  const [stores, setStores] = useState(initialStores);
-  const [accounts, setAccounts] = useState(initialAccounts);
+  const { rows: liveOrders, setRows: setOrderRows } = useCollections(orders);
+  const { rows: livePays, setRows: setPayRows } = usePayments(payments);
+  const { rows: liveStoreNotes } = useAllStoreFeedback(initialStoreNotes);
+  const { rows: liveAppNotes } = useAppFeedback(initialAppNotes);
+  const { rows: liveReplies, setRows: setReplies } = useFeedbackReplies(initialReplies);
+  const [storeState, setStores] = useState(initialStores);
+  const [accountState, setAccounts] = useState(initialAccounts);
+  const scoped = useMemo(
+    () =>
+      splitLiveData(profile, {
+        stores: storeState,
+        accounts: accountState,
+        lgus,
+        payments: livePays,
+        orders: liveOrders,
+        storeNotes: liveStoreNotes,
+        appNotes: liveAppNotes,
+        replies: liveReplies,
+      }),
+    [profile, storeState, accountState, lgus, livePays, liveOrders, liveStoreNotes, liveAppNotes, liveReplies]
+  );
+  const stores = scoped.stores;
+  const accounts = scoped.accounts;
+  const orderRows = scoped.orders;
+  const payRows = scoped.payments;
+  const storeNotes = scoped.storeNotes;
+  const appNotes = scoped.appNotes;
+  const replies = scoped.replies;
+  const visibleLgus = scoped.lgus;
+
+  const replaceStores = (next: Store[]) =>
+    setStores((prev) =>
+      mergeScopedRows(prev, next, splitLiveData(profile, { stores: prev, lgus }).stores.map((row) => row.id))
+    );
+  const replaceAccounts = (next: Profile[]) =>
+    setAccounts((prev) =>
+      mergeScopedRows(prev, next, splitLiveData(profile, { accounts: prev }).accounts.map((row) => row.id))
+    );
+  const replacePayments = (next: Payment[]) =>
+    setPayRows((prev) =>
+      mergeScopedRows(
+        prev,
+        next,
+        splitLiveData(profile, { stores: storeState, lgus, payments: prev }).payments.map((row) => row.id)
+      )
+    );
+  const replaceOrders = (next: Collection[]) =>
+    setOrderRows((prev) =>
+      mergeScopedRows(
+        prev,
+        next,
+        splitLiveData(profile, { stores: storeState, lgus, orders: prev }).orders.map((row) => row.id)
+      )
+    );
   const [products, setProducts] = useState(initialProducts);
   const [tab, setTab] = useState<OpsTab>('overview');
   const [navOpen, setNavOpen] = useState(false);
@@ -286,11 +334,11 @@ export function OpsConsole({
             <OpsUsersPanel
               me={profile}
               accounts={accounts}
-              lgus={lgus}
+              lgus={visibleLgus}
               regions={regions}
               busy={busy}
               setBusy={setBusy}
-              onChange={setAccounts}
+              onChange={replaceAccounts}
             />
           )}
 
@@ -298,10 +346,10 @@ export function OpsConsole({
             <OpsStoresPanel
               profile={profile}
               stores={stores}
-              lgus={lgus}
+              lgus={visibleLgus}
               busy={busy}
               setBusy={setBusy}
-              onChange={setStores}
+              onChange={replaceStores}
               focusId={storeFocus}
               orders={orderRows}
               payments={payRows}
@@ -366,14 +414,14 @@ export function OpsConsole({
               orders={orderRows}
               accounts={accounts}
               products={products}
-              lgus={lgus}
+              lgus={visibleLgus}
               regions={regions}
               busy={busy}
               setBusy={setBusy}
-              onStores={setStores}
-              onPayments={setPayRows}
-              onOrders={setOrderRows}
-              onAccounts={setAccounts}
+              onStores={replaceStores}
+              onPayments={replacePayments}
+              onOrders={replaceOrders}
+              onAccounts={replaceAccounts}
               onProducts={setProducts}
             />
           )}

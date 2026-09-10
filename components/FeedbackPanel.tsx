@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { persistAppFeedback, removeAppFeedback } from '@/app/ops/actions';
+import { splitLiveData } from '@/lib/demo';
 import { tstamp } from '@/lib/format';
 import { useAppFeedback } from '@/lib/hooks/useAppFeedback';
 import { repliesFor } from '@/lib/hooks/useFeedbackReplies';
@@ -22,6 +23,7 @@ export function FeedbackPanel({
   replies: FeedbackReply[];
 }) {
   const { rows, setRows } = useAppFeedback();
+  const notes = useMemo(() => splitLiveData(profile, { appNotes: rows }).appNotes, [profile, rows]);
   const [topic, setTopic] = useState<AppFeedbackTopic>('suggestion');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -105,9 +107,9 @@ export function FeedbackPanel({
           <p className="kicker">{profile.role === 'superadmin' ? 'Inbox' : 'Yours'}</p>
           <h3>{profile.role === 'superadmin' ? 'All suggestions' : 'Sent notes'}</h3>
         </header>
-        {rows.length ? (
+        {notes.length ? (
           <div className="feed">
-            {rows.map((row) => (
+            {notes.map((row) => (
               <article className="feedpost" key={row.id}>
                 <div className="feedpost__top">
                   <span className={`chip ${row.topic === 'bug' ? 'chip--due' : row.topic === 'other' ? 'chip--pending' : 'chip--ok'}`}>

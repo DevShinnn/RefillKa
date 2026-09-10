@@ -2,9 +2,9 @@
 
 import { useMemo } from 'react';
 import { useCollections } from '@/lib/hooks/useCollections';
-import { PILOT_TARGET, WEEKLY_INSTALLMENT, productById, toSachetEquiv, type Payment, type Product, type Profile, type Store } from '@/lib/types';
+import { PILOT_TARGET, WEEKLY_INSTALLMENT, productById, toSachetEquiv, type Lgu, type Payment, type Product, type Profile, type Store } from '@/lib/types';
 import { fmt, manilaYmd, peso } from '@/lib/format';
-import { withoutDemoRows, withoutDemoStores } from '@/lib/demo';
+import { splitLiveData } from '@/lib/demo';
 import { INSTALLMENT_WEEKS, installmentWeekFor } from '@/lib/installments';
 import { usePayments } from '@/lib/hooks/usePayments';
 import { Topbar } from './Topbar';
@@ -19,6 +19,7 @@ export function ExecClient({
   products,
   payments = [],
   initial,
+  lgus = [],
 }: {
   profile: Profile;
   scope: string;
@@ -26,12 +27,14 @@ export function ExecClient({
   products: Product[];
   payments?: Payment[];
   initial: any[];
+  lgus?: Lgu[];
 }) {
-  const stores = withoutDemoStores(allStores);
   const { rows: liveOrders, status } = useCollections(initial);
   const { rows: livePays } = usePayments(payments);
-  const rows = withoutDemoRows(liveOrders, allStores);
-  const payRows = withoutDemoRows(livePays, allStores);
+  const scoped = splitLiveData(profile, { stores: allStores, orders: liveOrders, payments: livePays, lgus });
+  const stores = scoped.stores;
+  const rows = scoped.orders;
+  const payRows = scoped.payments;
 
   const sachet = rows.reduce((a, r) => a + toSachetEquiv(r), 0);
   const pct = Math.min(100, (sachet / PILOT_TARGET) * 100);
