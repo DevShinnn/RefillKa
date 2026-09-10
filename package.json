@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "npx --yes tsx scripts/test-cases.mts",
     "seed:users": "node scripts/seed-users.mjs",
     "seed:demo": "node scripts/seed-demo.mjs",
     "ensure:dev": "node scripts/ensure-dev.mjs",

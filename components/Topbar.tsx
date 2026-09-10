@@ -1,9 +1,11 @@
 'use client';
 
-import { RefillMark, Wordmark } from './Brand';
+import { useState } from 'react';
 import { signOut } from '@/app/login/actions';
 import type { LiveStatus } from '@/lib/hooks/useCollections';
 import { ROLE_LABEL, type Role } from '@/lib/roles';
+import { RefillMark, Wordmark } from './Brand';
+import { ConfirmModal } from './ConfirmModal';
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -30,6 +32,13 @@ export function Topbar({
   menuOpen?: boolean;
 }) {
   const line = [officerId, ROLE_LABEL[role]].filter(Boolean).join(' · ');
+  const [signOutOpen, setSignOutOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
+  const confirmSignOut = async () => {
+    setSigningOut(true);
+    await signOut();
+  };
 
   return (
     <header className="topbar">
@@ -95,17 +104,27 @@ export function Topbar({
                 </div>
               )}
             </dl>
-            <form action={signOut}>
-              <button className="profile__out" type="submit">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
-                </svg>
-                Sign out
-              </button>
-            </form>
+            <button className="profile__out" type="button" onClick={() => setSignOutOpen(true)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+              </svg>
+              Sign out
+            </button>
           </div>
         </details>
       </div>
+      {signOutOpen && (
+        <ConfirmModal
+          title="Sign out?"
+          kicker="Account"
+          message="Are you sure? You will need your ID and PIN to sign back in."
+          confirmLabel="Sign out"
+          danger
+          busy={signingOut}
+          onClose={() => !signingOut && setSignOutOpen(false)}
+          onConfirm={confirmSignOut}
+        />
+      )}
     </header>
   );
 }

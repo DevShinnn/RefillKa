@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { persistStore } from '@/app/ops/actions';
+import { opsHref, parseOpsTab } from '@/lib/appNav';
 import { mergeScopedRows, splitLiveData } from '@/lib/demo';
 import { createClient } from '@/lib/supabase/client';
 import { useCollections } from '@/lib/hooks/useCollections';
@@ -133,7 +135,9 @@ export function OpsConsole({
       )
     );
   const [products, setProducts] = useState(initialProducts);
-  const [tab, setTab] = useState<OpsTab>('overview');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tab = parseOpsTab(searchParams);
   const [navOpen, setNavOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [storeFocus, setStoreFocus] = useState<string | null>(null);
@@ -199,7 +203,7 @@ export function OpsConsole({
 
   const go = (next: OpsTab, storeId?: string) => {
     if (storeId) setStoreFocus(storeId);
-    setTab(next);
+    router.push(opsHref(next));
     if (window.matchMedia('(max-width: 959px)').matches) setNavOpen(false);
   };
 

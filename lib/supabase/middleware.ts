@@ -6,10 +6,16 @@ function hasAuthCookie(request: NextRequest) {
   return request.cookies.getAll().some((cookie) => cookie.name.includes('-auth-token'));
 }
 
+function withNoStore(response: NextResponse) {
+  response.headers.set('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+  return response;
+}
+
 function redirectTo(request: NextRequest, pathname: string) {
   const url = request.nextUrl.clone();
   url.pathname = pathname;
-  return NextResponse.redirect(url);
+  url.search = '';
+  return withNoStore(NextResponse.redirect(url));
 }
 
 /**
@@ -21,7 +27,7 @@ export async function updateSession(request: NextRequest) {
   const isLoginSurface = path === FIELD_LOGIN || path === OPS_LOGIN;
 
   if (!hasAuthCookie(request)) {
-    if (isLoginSurface) return NextResponse.next({ request });
+    if (isLoginSurface) return withNoStore(NextResponse.next({ request }));
     return redirectTo(request, path === '/' ? FIELD_LOGIN : loginPathFor(path));
   }
 
@@ -50,7 +56,7 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    if (isLoginSurface) return response;
+    if (isLoginSurface) return withNoStore(response);
     return redirectTo(request, loginPathFor(path));
   }
 
@@ -68,5 +74,5 @@ export async function updateSession(request: NextRequest) {
     return redirectTo(request, homeForRole(role));
   }
 
-  return response;
+  return withNoStore(response);
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { loginToEmail } from '@/lib/loginId';
@@ -14,6 +14,38 @@ export function LoginBox({ portal }: { portal: 'field' | 'ops' }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [showPin, setShowPin] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const resume = async () => {
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!active || !session?.user) return;
+      let role = roleFromAuthUser(session.user);
+      if (!role) {
+        const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+        role = (profile?.role ?? null) as Role | null;
+      }
+      const dest = homeForRole(role);
+      if (!dest || dest === '/login') return;
+      if (window.location.pathname === dest) {
+        router.refresh();
+        return;
+      }
+      window.location.replace(dest);
+    };
+    void resume();
+    const onShow = (event: PageTransitionEvent) => {
+      if (event.persisted) void resume();
+    };
+    window.addEventListener('pageshow', onShow);
+    return () => {
+      active = false;
+      window.removeEventListener('pageshow', onShow);
+    };
+  }, [portal, router]);
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();

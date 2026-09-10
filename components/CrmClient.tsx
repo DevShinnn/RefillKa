@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { persistStore, persistStoreFeedback, removeStoreFeedback } from '@/app/ops/actions';
+import { logHref, parseLogSearch } from '@/lib/appNav';
 import { splitLiveData } from '@/lib/demo';
 import { createClient } from '@/lib/supabase/client';
 import { useCollections } from '@/lib/hooks/useCollections';
@@ -85,15 +87,19 @@ export function CrmClient({
   const { rows: liveOrders, status, setRows: setOrderRows } = useCollections(orders);
   const { rows: livePays, setRows: setPayRows } = usePayments(initialPayments);
   const supabase = useMemo(() => createClient(), []);
-
-  const [screen, setScreen] = useState<Screen>('list');
-  const [tab, setTab] = useState<Tab>('stores');
-  const [navOpen, setNavOpen] = useState(false);
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const canSeeReport = isDeveloper(profile.role);
+  const nav = parseLogSearch(searchParams);
+  const tab = nav.tab === 'report' && !canSeeReport ? 'stores' : nav.tab;
+  const screen = nav.screen;
+  const openId = nav.storeId;
+
+  const [navOpen, setNavOpen] = useState(false);
 
   const go = (next: Tab) => {
     if (next === 'report' && !canSeeReport) return;
-    setTab(next);
+    router.push(logHref({ tab: next }));
     if (window.matchMedia('(max-width: 959px)').matches) setNavOpen(false);
   };
 
@@ -126,7 +132,6 @@ export function CrmClient({
   const orderRows = scoped.orders;
   const payRows = scoped.payments;
   const reorderCount = orderRows.filter(isPendingOrder).length;
-  const [openId, setOpenId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editDetails, setEditDetails] = useState(false);
   const [visitDate, setVisitDate] = useState(manilaYmd());
@@ -215,26 +220,41 @@ export function CrmClient({
     setWillReorder(s.will_reorder === true ? 'yes' : s.will_reorder === false ? 'no' : '');
   };
 
+  const navKey = `${screen}:${openId ?? ''}`;
+  const lastNav = useRef('');
+  useEffect(() => {
+    if (screen === 'store' && openId && stores.length && !stores.some((s) => s.id === openId)) {
+      router.replace(logHref());
+      return;
+    }
+    if (lastNav.current === navKey) return;
+    lastNav.current = navKey;
+    if (screen === 'store') {
+      const s = stores.find((row) => row.id === openId);
+      if (!s) return;
+      fillForm(s);
+      setVisitDate(manilaYmd());
+      setEditDetails(false);
+      setFeedbackNote('');
+      setFeedbackTopic('product');
+      setCart([]);
+      setCheckout(null);
+      return;
+    }
+    if (screen === 'new') {
+      setForm(blankStoreForm());
+      setWillReorder('');
+      setCart([]);
+      setVisitDate(manilaYmd());
+    }
+  }, [navKey, openId, router, screen, stores]);
+
   const openStore = (s: Store) => {
-    setOpenId(s.id);
-    fillForm(s);
-    setVisitDate(manilaYmd());
-    setEditDetails(false);
-    setFeedbackNote('');
-    setFeedbackTopic('product');
-    setCart([]);
-    setCheckout(null);
-    setScreen('store');
-    setTab('stores');
+    router.push(logHref({ store: s.id }));
   };
 
   const openNew = () => {
-    setOpenId(null);
-    setForm(blankStoreForm());
-    setWillReorder('');
-    setCart([]);
-    setVisitDate(manilaYmd());
-    setScreen('new');
+    router.push(logHref({ newStore: true }));
   };
 
   const saveStore = async (e: FormEvent) => {
@@ -748,8 +768,8 @@ export function CrmClient({
           <form onSubmit={saveStore} className={`crm-form${screen === 'store' ? ' crm-form--visit' : ''}`}>
             <header className="pagehead pagehead--split">
               <div>
-                <button type="button" className="back" onClick={() => setScreen('list')}>
-                  Stores
+                <button type="button" className="back" onClick={() => router.back()}>
+                  Back
                 </button>
                 {screen === 'new' && <p className="kicker">New account</p>}
                 <h1>{screen === 'new' ? 'Open ARRP' : store ? storeDisplayName(store) : 'Store'}</h1>
