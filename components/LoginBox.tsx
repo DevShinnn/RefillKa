@@ -7,34 +7,51 @@ import { loginToEmail } from '@/lib/loginId';
 import { DEMO_FIELD, DEMO_OPS, DEMO_PIN } from '@/lib/demo';
 import { homeForRole, isFieldRole, isOpsRole, roleFromAuthUser, type Role } from '@/lib/roles';
 import { RefillMark, Wordmark } from '@/components/Brand';
+import { PageLoading } from '@/components/PageLoading';
 
 export function LoginBox({ portal }: { portal: 'field' | 'ops' }) {
   const ops = portal === 'ops';
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [checking, setChecking] = useState(true);
   const [showPin, setShowPin] = useState(false);
+
+  const openHome = (dest: string) => {
+    if (window.location.pathname === dest) {
+      router.refresh();
+      return;
+    }
+    router.replace(dest);
+  };
 
   useEffect(() => {
     let active = true;
     const resume = async () => {
-      const supabase = createClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!active || !session?.user) return;
-      let role = roleFromAuthUser(session.user);
-      if (!role) {
-        const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
-        role = (profile?.role ?? null) as Role | null;
+      try {
+        const supabase = createClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!active) return;
+        if (!session?.user) {
+          setChecking(false);
+          return;
+        }
+        let role = roleFromAuthUser(session.user);
+        if (!role) {
+          const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+          role = (profile?.role ?? null) as Role | null;
+        }
+        const dest = homeForRole(role);
+        if (!dest || dest === '/login') {
+          setChecking(false);
+          return;
+        }
+        openHome(dest);
+      } catch {
+        if (active) setChecking(false);
       }
-      const dest = homeForRole(role);
-      if (!dest || dest === '/login') return;
-      if (window.location.pathname === dest) {
-        router.refresh();
-        return;
-      }
-      window.location.replace(dest);
     };
     void resume();
     const onShow = (event: PageTransitionEvent) => {
@@ -89,13 +106,11 @@ export function LoginBox({ portal }: { portal: 'field' | 'ops' }) {
       return;
     }
 
-    const dest = homeForRole(role);
-    if (window.location.pathname === dest) {
-      router.refresh();
-      return;
-    }
-    window.location.replace(dest);
+    openHome(homeForRole(role));
   };
+
+  if (checking) return <PageLoading label="Checking session…" />;
+  if (pending) return <PageLoading label="Opening your workspace…" />;
 
   return (
     <section className="login">

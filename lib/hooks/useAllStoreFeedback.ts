@@ -16,11 +16,16 @@ export function useAllStoreFeedback(initial: StoreFeedback[] = []) {
     const sortDesc = (a: StoreFeedback, b: StoreFeedback) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
 
-    const load = async () => {
-      const { data } = await sb.from('store_feedback').select('*').order('created_at', { ascending: false }).limit(500);
-      if (active && data) setRows((data as StoreFeedback[]).slice().sort(sortDesc));
-    };
-    load();
+    if (!initial.length) {
+      void sb
+        .from('store_feedback')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(500)
+        .then(({ data }) => {
+          if (active && data) setRows((data as StoreFeedback[]).slice().sort(sortDesc));
+        });
+    }
 
     const channel = listenTable(sb, 'store_feedback', (payload) => {
       if (!active) return;

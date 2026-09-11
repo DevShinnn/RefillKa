@@ -1,29 +1,39 @@
 import { Suspense } from 'react';
-import { requireProfile } from '@/lib/auth';
-import { scopeLabel } from '@/lib/scope';
-import type { Collection, Lgu, Payment, Product, Store } from '@/lib/types';
+import { AppBoot } from '@/components/AppBoot';
 import { ExecClient } from '@/components/ExecClient';
 import { PageLoading } from '@/components/PageLoading';
+import { requireProfile } from '@/lib/auth';
+import { createClient } from '@/lib/supabase/server';
+import { scopeLabel } from '@/lib/scope';
+import type { Collection, Lgu, Payment, Product, Profile, Store } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
 export default function ExecutivePage() {
   return (
     <Suspense fallback={<PageLoading label="Opening executive…" />}>
-      <ExecutiveApp />
+      <ExecutiveGate />
     </Suspense>
   );
 }
 
-async function ExecutiveApp() {
-  const { supabase, profile } = await requireProfile([
+async function ExecutiveGate() {
+  const { profile } = await requireProfile([
     'superadmin',
     'lgu_exec',
     'regional_exec',
     'national_exec',
     'national_admin',
   ]);
+  return (
+    <Suspense fallback={<AppBoot profile={profile} label="Loading executive summary…" />}>
+      <ExecutiveData profile={profile} />
+    </Suspense>
+  );
+}
 
+async function ExecutiveData({ profile }: { profile: Profile }) {
+  const supabase = await createClient();
   const [{ data: stores }, { data: products }, { data: collections }, { data: payments }, { data: lgus }, scope] = await Promise.all([
     supabase.from('stores').select('*').order('name'),
     supabase.from('products').select('*').eq('active', true).order('sort_order'),

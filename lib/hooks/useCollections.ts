@@ -47,9 +47,13 @@ export function useCollections(initial: Collection[]) {
         return next.slice().sort(sortDesc);
       });
     });
-    void refresh().then(() => {
-      if (active) setStatus('live');
-    });
+    if (initial.length) {
+      setStatus('live');
+    } else {
+      void refresh().then(() => {
+        if (active) setStatus('live');
+      });
+    }
 
     return () => {
       active = false;

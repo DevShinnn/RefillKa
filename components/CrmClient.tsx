@@ -166,7 +166,7 @@ export function CrmClient({
   const { rows: feedbackRows, setRows: setFeedbackRows } = useStoreFeedback(
     screen === 'store' ? openId : null
   );
-  const { rows: feedbackReplies } = useFeedbackReplies();
+  const { rows: feedbackReplies } = useFeedbackReplies([], tab === 'feedback' || screen === 'store');
   const cartTotal = cart.reduce((sum, line) => {
     const product = productById(products, line.productId);
     if (!product) return sum;

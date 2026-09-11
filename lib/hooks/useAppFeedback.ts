@@ -16,14 +16,16 @@ export function useAppFeedback(initial: AppFeedback[] = []) {
     const sortDesc = (a: AppFeedback, b: AppFeedback) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
 
-    void sb
-      .from('app_feedback')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(200)
-      .then(({ data }) => {
-        if (active && data) setRows((data as AppFeedback[]).slice().sort(sortDesc));
-      });
+    if (!initial.length) {
+      void sb
+        .from('app_feedback')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(200)
+        .then(({ data }) => {
+          if (active && data) setRows((data as AppFeedback[]).slice().sort(sortDesc));
+        });
+    }
 
     const channel = listenTable(sb, 'app_feedback', (payload) => {
       if (!active) return;

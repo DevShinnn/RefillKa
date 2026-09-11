@@ -5,11 +5,12 @@ import { createClient } from '@/lib/supabase/client';
 import type { FeedbackReply } from '@/lib/types';
 import { listenTable } from './realtime';
 
-export function useFeedbackReplies(initial: FeedbackReply[] = []) {
+export function useFeedbackReplies(initial: FeedbackReply[] = [], enabled = true) {
   const [rows, setRows] = useState<FeedbackReply[]>(initial);
   const supabase = useRef(createClient());
 
   useEffect(() => {
+    if (!enabled) return;
     const sb = supabase.current;
     let active = true;
 
@@ -31,21 +32,23 @@ export function useFeedbackReplies(initial: FeedbackReply[] = []) {
       });
     };
 
-    void sb
-      .from('feedback_replies')
-      .select('*')
-      .order('created_at')
-      .limit(1000)
-      .then(({ data }) => {
-        if (active && data) setRows((data as FeedbackReply[]).slice().sort(sortAsc));
-      });
+    if (!initial.length) {
+      void sb
+        .from('feedback_replies')
+        .select('*')
+        .order('created_at')
+        .limit(1000)
+        .then(({ data }) => {
+          if (active && data) setRows((data as FeedbackReply[]).slice().sort(sortAsc));
+        });
+    }
 
     const channel = listenTable(sb, 'feedback_replies', apply);
     return () => {
       active = false;
       void sb.removeChannel(channel);
     };
-  }, []);
+  }, [enabled]);
 
   return { rows, setRows };
 }

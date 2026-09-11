@@ -1,35 +1,30 @@
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { AppBoot } from '@/components/AppBoot';
+import { LoginBox } from '@/components/LoginBox';
+import { OpsConsole } from '@/components/OpsConsole';
+import { PageLoading } from '@/components/PageLoading';
 import { homeForRole, isFieldRole, type Role } from '@/lib/roles';
 import { scopeLabel } from '@/lib/scope';
+import { createClient } from '@/lib/supabase/server';
 import type { AppFeedback, Collection, FeedbackReply, Lgu, Payment, Product, Profile, Region, Store, StoreFeedback } from '@/lib/types';
-import { OpsConsole } from '@/components/OpsConsole';
-import { LoginBox } from '@/components/LoginBox';
-import { PageLoading } from '@/components/PageLoading';
 
 export const dynamic = 'force-dynamic';
 
-export default async function OpsPage() {
+export default function OpsPage() {
+  return (
+    <Suspense fallback={<PageLoading label="Opening operations…" />}>
+      <OpsGate />
+    </Suspense>
+  );
+}
+
+async function OpsGate() {
   const supabase = await createClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
   if (!session?.user) return <LoginBox portal="ops" />;
-
-  return (
-    <Suspense fallback={<PageLoading label="Opening operations…" />}>
-      <OpsApp />
-    </Suspense>
-  );
-}
-
-async function OpsApp() {
-  const supabase = await createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session?.user) redirect('/ops');
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -40,6 +35,15 @@ async function OpsApp() {
   if (!profile || isFieldRole(profile.role)) redirect('/log');
   if (profile.role !== 'superadmin') redirect(homeForRole(profile.role as Role));
 
+  return (
+    <Suspense fallback={<AppBoot profile={profile} label="Loading operations…" />}>
+      <OpsData profile={profile} />
+    </Suspense>
+  );
+}
+
+async function OpsData({ profile }: { profile: Profile }) {
+  const supabase = await createClient();
   const [
     { data: stores },
     { data: collections },

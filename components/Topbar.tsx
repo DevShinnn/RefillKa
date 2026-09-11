@@ -67,6 +67,12 @@ export function Topbar({
           </>
         )}
         <div className="spacer" />
+        {status === 'connecting' && (
+          <span className="topbar__live" aria-live="polite">
+            <span className="pageload__spin pageload__spin--sm" aria-hidden="true" />
+            Loading
+          </span>
+        )}
         <details className="profile">
           <summary className="profile__btn" title={name}>
             <span className="profile__av" aria-hidden="true">

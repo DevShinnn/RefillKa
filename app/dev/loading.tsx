@@ -1,5 +1,5 @@
 import { PageLoading } from '@/components/PageLoading';
 
-export default function OpsLoading() {
+export default function DevLoading() {
   return <PageLoading label="Opening operations…" />;
 }
